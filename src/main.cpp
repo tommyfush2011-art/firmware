@@ -614,18 +614,19 @@ void loop() {
 void loop() {
     tft.setLogging();
     Serial.println(
-        "\n"
-        "██████  ██████  ██    ██  ██████ ███████ \n"
-        "██   ██ ██   ██ ██    ██ ██      ██      \n"
-        "██████  ██████  ██    ██ ██      █████   \n"
-        "██   ██ ██   ██ ██    ██ ██      ██      \n"
-        "██████  ██   ██  ██████   ██████ ███████ \n"
-        "                                         \n"
-        "         PREDATORY FIRMWARE\n\n"
-        "Tips: Connect to the WebUI for better experience\n"
-        "      Add your network by sending: wifi add ssid password\n\n"
-        "At your command:"
-    );
+    "\n"
+    "███████╗██╗   ██╗███████╗██╗  ██╗\n"
+    "██╔════╝██║   ██║██╔════╝██║  ██║\n"
+    "█████╗  ██║   ██║███████╗███████║\n"
+    "██╔══╝  ██║   ██║╚════██║██╔══██║\n"
+    "██║     ╚██████╔╝███████║██║  ██║\n"
+    "╚═╝      ╚═════╝ ╚══════╝╚═╝  ╚═╝\n"
+    "\n"
+    "          FUSH FIRMWARE\n\n"
+    "Tips: Connect to the WebUI for better experience\n"
+    "      Add your network by sending: wifi add ssid password\n\n"
+    "At your command:"
+);
 
     // Enable navigation through webUI
     tft.fillScreen(bruceConfig.bgColor);
