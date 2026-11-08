@@ -292,7 +292,7 @@ void drawWebUiScreen(bool mode_ap) {
     }
 
     tft.setCursor(padX, currentY);
-    if (mdnsRunning) tft.print("Url: http://bruce.local");
+    if (mdnsRunning) tft.print("Url: http://fush.local");
     currentY += LH * FP + 6;
 
     tft.setCursor(padX, currentY);
