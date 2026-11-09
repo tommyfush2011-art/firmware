@@ -1,4 +1,4 @@
-function $(s) {
+ function $(s) {
   return document.querySelector(s);
 }
 const IS_DEV = window.location.host === "127.0.0.1:8080";
@@ -508,40 +508,54 @@ async function openNavigator() {
   autoReloadScreen();
 }
 
-let SCREEN_NAVIGATING = false;
+// Fush Navigator V3: preserve rapid taps and serialize screen snapshots.
+const NAV_QUEUE = [];
+let NAV_WORKER = false;
+const NAV_QUEUE_LIMIT = 24;
 async function runNavigation(direction) {
-  if (SCREEN_NAVIGATING) return;
-  SCREEN_NAVIGATING = true;
+  if (NAV_QUEUE.length >= NAV_QUEUE_LIMIT) return;
+  NAV_QUEUE.push(direction.toLowerCase());
+  if (NAV_WORKER) return;
+  NAV_WORKER = true;
   try {
-    drawCanvasLoading();
-    await requestPost("/cm", { cmnd: `nav ${direction.toLowerCase()}` });
-    await reloadScreen();
-  } catch (error) {
-    alert("Failed to run command: " + error.message);
-    console.error(error);
+    while (NAV_QUEUE.length) {
+      const next = NAV_QUEUE.shift();
+      try {
+        await requestPost("/cm", { cmnd: `nav ${next}` });
+        // Allow the firmware's menu loop to consume the key and redraw.
+        await new Promise(resolve => setTimeout(resolve, 80));
+        await reloadScreen();
+      } catch (error) {
+        console.error("Navigator command failed:", error);
+        NAV_QUEUE.length = 0;
+        alert("Failed to navigate: " + error.message);
+      }
+    }
   } finally {
-    SCREEN_NAVIGATING = false;
+    NAV_WORKER = false;
   }
 }
 
 const btnForceReload = $("#force-reload");
-let SCREEN_RELOAD = false;
-async function reloadScreen() {
-  if (SCREEN_RELOAD) return;
-  SCREEN_RELOAD = true;
-  btnForceReload.classList.add("reloading");
-  try {
-    let binResponse = await fetch((IS_DEV ? "/bruce" : "") + "/getscreen");
-    let arrayBuffer = await binResponse.arrayBuffer();
-    let screenData = new Uint8Array(arrayBuffer);
-    await renderTFT(screenData);
-  } catch (error) {
-    console.error("Failed to reload screen:", error);
-    alert("Failed to reload screen: " + error.message);
-  } finally {
-    btnForceReload.classList.remove("reloading");
-    SCREEN_RELOAD = false;
-  }
+let SCREEN_RELOAD_PROMISE = null;
+function reloadScreen() {
+  if (SCREEN_RELOAD_PROMISE) return SCREEN_RELOAD_PROMISE;
+  SCREEN_RELOAD_PROMISE = (async () => {
+    btnForceReload.classList.add("reloading");
+    try {
+      const response = await fetch((IS_DEV ? "/bruce" : "") + "/getscreen", { cache: "no-store" });
+      if (!response.ok) throw new Error("Screen request failed: HTTP " + response.status);
+      const screenData = new Uint8Array(await response.arrayBuffer());
+      if (!screenData.length) throw new Error("Empty screen snapshot");
+      await renderTFT(screenData);
+    } catch (error) {
+      console.error("Failed to reload screen:", error);
+      // Keep the last good frame visible when a request fails.
+    } finally {
+      btnForceReload.classList.remove("reloading");
+    }
+  })().finally(() => { SCREEN_RELOAD_PROMISE = null; });
+  return SCREEN_RELOAD_PROMISE;
 }
 
 const eConfigAutoReload = $("#navigator-auto-reload");
@@ -578,7 +592,10 @@ let loadingDrawn = false;
 const imageCache = {}; // global
 async function renderTFT(data) {
   loadingDrawn = false;
-  const canvas = $("#navigator-screen");
+  const visibleCanvas = $("#navigator-screen");
+  const canvas = document.createElement("canvas");
+  canvas.width = visibleCanvas.width;
+  canvas.height = visibleCanvas.height;
   const ctx = canvas.getContext("2d");
 
   const loadImage = async (url) => {
@@ -711,8 +728,11 @@ async function renderTFT(data) {
     ctx.strokeStyle = "black";
     switch (fn) {
       case 99: // SCREEN_INFO
-        canvas.width = input.w;
-        canvas.height = input.h;
+        if (input.w > 0 && input.h > 0 && input.w <= 2048 && input.h <= 2048) {
+          canvas.width = input.w;
+          canvas.height = input.h;
+        }
+        break;
       case 0: // FILLSCREEN
         ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -812,32 +832,20 @@ async function renderTFT(data) {
       case 15: // DRAWRIGHTSTRING
       case 16: // DRAWSTRING
       case 17: // PRINT
-        // This must be enhanced to make font width be multiple of 6px, the font used here is multiple of 4.5px,
-        // "\n" are not treated, and long lines do not split into multi lines..
-        if (input.bg == input.fg) {
-          input.bg = 0;
-        }
-        ctx.fillStyle = color565toCSS(input.bg);
-
-        input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
-        screenText.push(input.txt); // Collect text for WiFi detection
-
-        var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
-        var o = 0;
-        if (fn === 15) o = input.txt.length * fw;
-        if (fn === 14) o = (input.txt.length * fw) / 2;
-        // draw a rectangle at the text area, to avoid overlapping texts
-        ctx.fillRect(
-          input.x - o,
-          input.y,
-          input.txt.length * fw,
-          input.size * 8,
-        );
-
-        ctx.fillStyle = color565toCSS(input.fg);
+        input.txt = input.txt.replaceAll("\\n", "");
+        screenText.push(input.txt);
         ctx.font = `${input.size * 8}px monospace`;
         ctx.textBaseline = "top";
         ctx.textAlign = fn === 14 ? "center" : fn === 15 ? "right" : "left";
+        const measuredWidth = ctx.measureText(input.txt).width;
+        const left = fn === 14 ? input.x - measuredWidth / 2 :
+                     fn === 15 ? input.x - measuredWidth : input.x;
+        // Only paint the text background when the firmware specifies one.
+        if (input.bg !== input.fg) {
+          ctx.fillStyle = color565toCSS(input.bg);
+          ctx.fillRect(left, input.y, measuredWidth, input.size * 8);
+        }
+        ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillText(input.txt, input.x, input.y);
         break;
 
@@ -860,6 +868,13 @@ async function renderTFT(data) {
         ctx.fillRect(input.x, input.y, input.w, 1);
         break;
     }
+  }
+
+  // Commit only the completed frame to the visible canvas.
+  if (canvas.width && canvas.height) {
+    if (visibleCanvas.width !== canvas.width) visibleCanvas.width = canvas.width;
+    if (visibleCanvas.height !== canvas.height) visibleCanvas.height = canvas.height;
+    visibleCanvas.getContext("2d").drawImage(canvas, 0, 0);
   }
 
   // Check if WiFi menu is present on screen and show/hide warning
@@ -912,7 +927,6 @@ eConfigAutoReload.addEventListener("change", async (e) => {
 
 btnForceReload.addEventListener("click", async (e) => {
   e.preventDefault();
-  drawCanvasLoading();
   await reloadScreen();
 });
 
