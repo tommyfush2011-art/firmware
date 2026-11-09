@@ -1,11 +1,51 @@
+
+name: Build Fush Firmware ESP32-S3
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "include/**"
+      - "lib/**"
+      - "boards/**"
+      - "platformio.ini"
+      - "platformio/**"
+      - "scripts/**"
+      - ".github/workflows/buil_parallel.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fush-firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build esp32-s3-devkitc-1-psram
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
+          python -m pip install --upgrade pip
           python -m pip install requests esptool intelhex platformio
 
       - name: Cache PlatformIO
@@ -21,22 +61,37 @@
       - name: Set firmware version
         run: |
           version="${GITHUB_SHA::7}"
+          echo "Building Fush Firmware version: $version"
           sed -i "s/-DBRUCE_VERSION=/-DBRUCE_VERSION='\"$version\"' ; /g" ./platformio.ini
-          sed -i "s/-DGIT_COMMIT_HASH='\"Homebrew\"'/\!echo '-DGIT_COMMIT_HASH=\\\\\"'\$\(git describe --always --dirty)'\\\\\"'/g" ./platformio.ini
 
       - name: Compile Fush Firmware
         run: |
           set -o pipefail
-          platformio run -e esp32-s3-devkitc-1-psram | tee build.log
+          platformio run -e esp32-s3-devkitc-1-psram 2>&1 | tee build.log
 
       - name: Show build log on failure
         if: failure()
-        run: tail -n 100 build.log || true
+        run: |
+          tail -n 100 build.log || true
 
-      - name: Upload firmware
+      - name: Prepare firmware artifact
+        run: |
+          mkdir -p firmware-output
+
+          find . -maxdepth 1 -type f -name "Bruce-*.bin" \
+            -exec cp {} firmware-output/ \;
+
+          if ! find firmware-output -name "*.bin" | grep -q .; then
+            echo "No Bruce firmware binary found."
+            exit 1
+          fi
+
+          ls -lh firmware-output/
+
+      - name: Upload Fush Firmware
         uses: actions/upload-artifact@v4
         with:
           name: Fush-ESP32-S3-N16R8
-          path: Bruce-*.*
+          path: firmware-output/*.bin
           retention-days: 7
           if-no-files-found: error
