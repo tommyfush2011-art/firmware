@@ -508,40 +508,68 @@ async function openNavigator() {
   autoReloadScreen();
 }
 
-let SCREEN_NAVIGATING = false;
+// Fush Navigator V2: serialize inputs and keep screen refreshes atomic.
+const NAV_QUEUE_LIMIT = 24;
+const navQueue = [];
+let navWorkerRunning = false;
+let screenRefreshPromise = null;
+const btnForceReload = $("#force-reload");
+
 async function runNavigation(direction) {
-  if (SCREEN_NAVIGATING) return;
-  SCREEN_NAVIGATING = true;
+  // Keep the existing firmware navigation protocol unchanged.
+  if (navQueue.length >= NAV_QUEUE_LIMIT) return;
+  navQueue.push(direction.toLowerCase());
+  if (navWorkerRunning) return;
+  navWorkerRunning = true;
   try {
-    drawCanvasLoading();
-    await requestPost("/cm", { cmnd: `nav ${direction.toLowerCase()}` });
-    await reloadScreen();
-  } catch (error) {
-    alert("Failed to run command: " + error.message);
-    console.error(error);
+    while (navQueue.length) {
+      const next = navQueue.shift();
+      try {
+        // Finish any auto-refresh before sending another navigation command.
+        if (screenRefreshPromise) await screenRefreshPromise;
+        await requestPost("/cm", { cmnd: `nav ${next}` });
+        await reloadScreen();
+      } catch (error) {
+        console.error("Navigator command failed:", error);
+        alert("Failed to navigate: " + error.message);
+        navQueue.length = 0;
+        break;
+      }
+    }
   } finally {
-    SCREEN_NAVIGATING = false;
+    navWorkerRunning = false;
   }
 }
 
-const btnForceReload = $("#force-reload");
-let SCREEN_RELOAD = false;
-async function reloadScreen() {
-  if (SCREEN_RELOAD) return;
-  SCREEN_RELOAD = true;
-  btnForceReload.classList.add("reloading");
-  try {
-    let binResponse = await fetch((IS_DEV ? "/bruce" : "") + "/getscreen");
-    let arrayBuffer = await binResponse.arrayBuffer();
-    let screenData = new Uint8Array(arrayBuffer);
-    await renderTFT(screenData);
-  } catch (error) {
-    console.error("Failed to reload screen:", error);
-    alert("Failed to reload screen: " + error.message);
-  } finally {
-    btnForceReload.classList.remove("reloading");
-    SCREEN_RELOAD = false;
-  }
+function reloadScreen() {
+  // Share the in-flight refresh instead of silently discarding requests.
+  if (screenRefreshPromise) return screenRefreshPromise;
+  screenRefreshPromise = (async () => {
+    btnForceReload.classList.add("reloading");
+    try {
+      const response = await fetch((IS_DEV ? "/bruce" : "") + "/getscreen", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Screen request failed (${response.status})`);
+      const screenData = new Uint8Array(await response.arrayBuffer());
+      if (!screenData.length) throw new Error("Empty screen response");
+
+      // Build a complete frame offscreen; never show a half-drawn menu.
+      const frame = document.createElement("canvas");
+      const visible = $("#navigator-screen");
+      frame.width = visible.width;
+      frame.height = visible.height;
+      await renderTFT(screenData, frame);
+      visible.width = frame.width;
+      visible.height = frame.height;
+      visible.getContext("2d").drawImage(frame, 0, 0);
+    } finally {
+      btnForceReload.classList.remove("reloading");
+    }
+  })();
+  const current = screenRefreshPromise;
+  current.finally(() => {
+    if (screenRefreshPromise === current) screenRefreshPromise = null;
+  }).catch(() => {});
+  return current;
 }
 
 const eConfigAutoReload = $("#navigator-auto-reload");
@@ -558,8 +586,12 @@ async function taskReloader() {
     return;
   }
 
-  await reloadScreen();
-  setTimeout(taskReloader, timer);
+  try {
+    if (!navWorkerRunning) await reloadScreen();
+  } catch (error) {
+    console.warn("Automatic screen refresh failed:", error);
+  }
+  AUTO_RELOAD_SCREEN = setTimeout(taskReloader, timer);
   // better use setTimeout instead of setInterval to avoid overlapping calls
 }
 async function autoReloadScreen() {
@@ -576,9 +608,8 @@ async function autoReloadScreen() {
 /// TFT RENDER
 let loadingDrawn = false;
 const imageCache = {}; // global
-async function renderTFT(data) {
+async function renderTFT(data, canvas = $("#navigator-screen")) {
   loadingDrawn = false;
-  const canvas = $("#navigator-screen");
   const ctx = canvas.getContext("2d");
 
   const loadImage = async (url) => {
@@ -713,6 +744,7 @@ async function renderTFT(data) {
       case 99: // SCREEN_INFO
         canvas.width = input.w;
         canvas.height = input.h;
+        break;
       case 0: // FILLSCREEN
         ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -822,22 +854,14 @@ async function renderTFT(data) {
         input.txt = input.txt.replaceAll("\\n", ""); // remove new lines
         screenText.push(input.txt); // Collect text for WiFi detection
 
-        var fw = input.size === 3 ? 13.5 : input.size === 2 ? 9 : 4.5;
-        var o = 0;
-        if (fn === 15) o = input.txt.length * fw;
-        if (fn === 14) o = (input.txt.length * fw) / 2;
-        // draw a rectangle at the text area, to avoid overlapping texts
-        ctx.fillRect(
-          input.x - o,
-          input.y,
-          input.txt.length * fw,
-          input.size * 8,
-        );
-
-        ctx.fillStyle = color565toCSS(input.fg);
         ctx.font = `${input.size * 8}px monospace`;
         ctx.textBaseline = "top";
         ctx.textAlign = fn === 14 ? "center" : fn === 15 ? "right" : "left";
+        // Use measured glyph width rather than an estimate that can erase nearby labels.
+        const textWidth = ctx.measureText(input.txt).width;
+        const left = fn === 14 ? input.x - textWidth / 2 : fn === 15 ? input.x - textWidth : input.x;
+        ctx.fillRect(left, input.y, textWidth, input.size * 8);
+        ctx.fillStyle = color565toCSS(input.fg);
         ctx.fillText(input.txt, input.x, input.y);
         break;
 
