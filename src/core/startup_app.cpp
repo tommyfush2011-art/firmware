@@ -1,3 +1,4 @@
+
 /**
  * @file startup_app.cpp
  * @author Rennan Cockles (https://github.com/rennancockles)
@@ -20,6 +21,7 @@
 #include "modules/rfid/PN532KillerTools.h"
 #include "modules/rfid/pn532ble.h"
 #include "modules/wifi/sniffer.h"
+
 #ifdef SOC_USB_OTG_SUPPORTED
 #include "core/massStorage.h"
 #endif
@@ -32,28 +34,40 @@ StartupApp::StartupApp() {
     _startupApps["PN532 BLE"] = []() { Pn532ble(); };
     _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
 #endif
+
     _startupApps["Clock"] = []() { runClockLoop(); };
     _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
+
 #if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
+
     _startupApps["Wardriving"] = []() { Wardriving(true, true); };
     _startupApps["WardrivingNoRadio"] = []() { Wardriving(); };
     _startupApps["WardrivingBTEOnly"] = []() { Wardriving(false, true); };
     _startupApps["WardrivingWifiOnly"] = []() { Wardriving(true, false); };
-    _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
+
+    // FUSH FIRMWARE:
+    // Always request Access Point mode for the startup Web UI.
+    // Uses the AP SSID and password saved in firmware settings.
+    _startupApps["WebUI"] = []() { startWebUi(true); };
+
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs = nullptr;
         getScriptsFolder(fs);
         if (fs == nullptr) return;
-        run_bjs_script_headless(*fs, bruceConfig.startupAppJSInterpreterFile);
+        run_bjs_script_headless(
+            *fs,
+            bruceConfig.startupAppJSInterpreterFile
+        );
     };
 #endif
 }
 
 bool StartupApp::startApp(const String &appName) const {
     auto it = _startupApps.find(appName);
+
     if (it == _startupApps.end()) {
         Serial.println("Invalid startup app: " + appName);
         return false;
@@ -69,6 +83,10 @@ bool StartupApp::startApp(const String &appName) const {
 
 std::vector<String> StartupApp::getAppNames() const {
     std::vector<String> keys;
-    for (const auto &pair : _startupApps) { keys.push_back(pair.first); }
+
+    for (const auto &pair : _startupApps) {
+        keys.push_back(pair.first);
+    }
+
     return keys;
 }
