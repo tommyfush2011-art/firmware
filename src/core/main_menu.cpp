@@ -4,28 +4,11 @@
 #include <globals.h>
 
 MainMenu::MainMenu() {
+    // FushOS Lite: Wi-Fi, BLE, file access, USB HID and configuration.
     _menuItems = {
         &wifiMenu,
         &bleMenu,
-        &rfMenu,
-        &nrf24Menu,
-#if !defined(LITE_VERSION)
-        &loraMenu,
-#endif
-#if defined(FM_SI4713) && !defined(LITE_VERSION)
-        &fmMenu,
-#endif
-        &irMenu,
-#if !defined(LITE_VERSION)
-        &ethernetMenu,
-#endif
-        &gpsMenu,
-        &rfidMenu,
         &fileMenu,
-#if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-        &scriptsMenu,
-#endif
-        &clockMenu,
         &othersMenu,
         &configMenu,
     };
