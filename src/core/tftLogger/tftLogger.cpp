@@ -166,9 +166,13 @@ void tft_logger::getBinLog(uint8_t *outBuffer, size_t &outSize) {
     outSize += pos;
 
     if (!log) return;
+    // The log is a circular buffer. Once full, the oldest entry is at
+    // logWriteIndex, not at index zero. Replay entries in drawing order.
+    const int startIndex = (logCount == MAX_LOG_ENTRIES) ? logWriteIndex : 0;
     for (int i = 0; i < logCount; i++) {
-        if (log[i].data[0] != LOG_PACKET_HEADER) continue;
-        uint8_t *entry = log[i].data;
+        const int index = (startIndex + i) % MAX_LOG_ENTRIES;
+        if (log[index].data[0] != LOG_PACKET_HEADER) continue;
+        uint8_t *entry = log[index].data;
         uint8_t fn = entry[2];
 
         if (fn == DRAWIMAGE) {
@@ -209,6 +213,8 @@ bool tft_logger::isLogEqual(const tftLog &a, const tftLog &b) {
 void tft_logger::pushLogIfUnique(const tftLog &l) {
     if (!log) return;
     for (int i = 0; i < logCount; i++) {
+        // Invalidated entries must not suppress a subsequent redraw.
+        if (log[i].data[0] != LOG_PACKET_HEADER) continue;
         if (isLogEqual(log[i], l)) {
             return; // Entry already exists
         }
