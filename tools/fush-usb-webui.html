@@ -1,0 +1,1213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fush · USB Navigator</title>
+<style>
+:root {
+  --color: #ff3ec8;
+  --background: #242424;
+  --light-color: color-mix(in srgb, var(--color) 20%, gray 20%);
+}
+* {
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  color: var(--color);
+}
+html {
+  padding: 0;
+  margin: 0;
+}
+body {
+  background-color: var(--background);
+  font-size: 12px;
+  padding: 10px;
+  margin: 0;
+}
+.ml-10 {
+  margin-left: 10px !important;
+}
+.act-browse,
+.btn-action,
+.icon-action,
+.act-edit-file {
+  cursor: pointer;
+  outline: 0;
+}
+.btn-action {
+  border: 1px solid var(--color);
+  background-color: transparent;
+  padding: 2px 7px;
+  text-decoration: none;
+  text-align: center;
+}
+.btn-action:hover:not(:disabled),
+.btn-action.active,
+.btn-action:hover:not(:disabled) > *,
+.btn-action.active > * {
+  background-color: var(--color);
+  color: var(--background);
+}
+.btn-action:disabled {
+  filter: brightness(50%);
+  cursor: not-allowed;
+}
+.btn-action.btn-default {
+  font-weight: bold;
+  border: 2px solid var(--color);
+  padding: 1px 7px;
+}
+.icon-action {
+  border: 0;
+  background-color: transparent;
+  width: 24px;
+  height: 24px;
+  padding: 1px;
+  margin: 0;
+  text-align: center;
+  vertical-align: middle;
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+}
+svg > g,
+svg > path {
+  fill: var(--color);
+}
+.icon-action.act-download svg,
+.icon-action.act-download svg > path {
+  stroke: var(--color);
+  fill: transparent;
+}
+.icon-action:hover {
+  background-color: var(--color);
+}
+.icon-action:hover svg > g,
+.icon-action:hover svg > path {
+  fill: var(--background);
+}
+.icon-action.act-download:hover svg,
+.icon-action.act-download:hover svg > path {
+  stroke: var(--background);
+  fill: var(--color);
+}
+.inp-uploader {
+  opacity: 0;
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+}
+.container {
+  max-width: 800px;
+  margin: auto;
+  border: 1px solid var(--color);
+}
+.container .header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color);
+  align-items: center;
+}
+.container .header .title {
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.left-part,
+.right-part {
+  padding: 4px 6px;
+}
+.left-part {
+  border-left: 1px solid var(--color);
+  margin-right: auto;
+  width: auto;
+}
+.right-part {
+  margin-left: auto;
+  text-align: right;
+}
+.container .header button {
+  margin-top: 2px;
+  margin-bottom: 2px;
+  width: 100px;
+}
+.container .free-space {
+  border-bottom: 1px solid var(--color);
+  justify-content: space-between;
+  display: flex;
+}
+.container .free-space .block-space {
+  width: 50%;
+  border: 0px;
+  border-right: 1px solid var(--color);
+  padding: 5px;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
+}
+.container .free-space .block-space:last-child {
+  border: 0px;
+}
+.container .action-content {
+  padding: 5px;
+  border-bottom: 1px solid var(--color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.container .action-content .breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.container .content .table {
+  width: 100%;
+  border: 0px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.container .content .table .col-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.container .content .table .col-size {
+  width: 90px;
+  text-align: right;
+}
+.container .content .table .col-action {
+  width: 130px;
+  text-align: right;
+}
+.container .content .table tbody tr td {
+  padding: 5px;
+  height: 34px;
+}
+.container .content .table tbody tr:hover {
+  background-color: var(--light-color);
+}
+.container .content .table thead tr th {
+  border-bottom: 1px solid var(--color);
+  font-weight: bold;
+  font-size: 14px;
+  padding: 5px;
+}
+.table .col-action.type-folder .act-download,
+.table .col-action .act-play {
+  display: none;
+}
+.table .col-action.executable .act-play {
+  display: inherit;
+}
+.dialog-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+}
+.dialog {
+  border: 1px solid var(--color);
+  min-width: 250px;
+  max-width: 400px;
+  background-color: var(--background);
+}
+.dialog .dialog-head {
+  border-bottom: 1px solid var(--color);
+  padding: 5px 10px;
+  font-size: 14px;
+  font-weight: bold;
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+.dialog .dialog-head span {
+  display: inline-block;
+}
+.dialog .dialog-body {
+  padding: 10px;
+}
+.dialog .dialog-body p:first-child {
+  margin-top: 0;
+}
+.dialog .dialog-body input {
+  display: block;
+  min-width: 300px;
+  width: 100%;
+  border: 1px solid var(--color);
+  background-color: var(--background);
+  outline: 0px;
+  padding: 2px 4px;
+}
+.dialog .dialog-footer {
+  padding: 10px;
+  border-top: 1px solid var(--color);
+  text-align: right;
+}
+.dialog.navigator {
+  max-width: 500px;
+}
+.dialog.navigator .dialog-head {
+  display: flex;
+  justify-content: space-between;
+  padding-right: 5px;
+}
+.dialog.navigator .dialog-head select {
+  background-color: var(--background);
+  padding: 1px;
+  border: 1px solid var(--color);
+}
+.dialog.navigator .dialog-body {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+.dialog.navigator #navigator-screen {
+  border: 1px solid var(--color);
+  border-radius: 3px;
+}
+.dialog.navigator .navigator-canvas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--color);
+  border-radius: 3px;
+  /* background-color: var(--color); */
+}
+.dialog.navigator .navigator-canvas > div {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 1px;
+}
+.dialog.navigator .navigator-canvas .nav {
+  width: 38px;
+  height: 38px;
+  border-radius: 3px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--background);
+}
+.dialog.navigator .navigator-canvas .nav.nav-ok:before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-color: var(--color);
+  border-radius: 100%;
+}
+.dialog.navigator .navigator-canvas .nav.nav-page-up svg {
+  transform: rotate(-90deg);
+}
+.dialog.navigator .navigator-canvas .nav.nav-page-down svg {
+  transform: rotate(90deg);
+}
+.dialog.navigator .navigator-canvas .nav.nav-down svg {
+  transform: rotate(180deg);
+}
+.dialog.navigator .navigator-canvas .nav.nav-left svg {
+  transform: rotate(-90deg);
+}
+.dialog.navigator .navigator-canvas .nav.nav-right svg {
+  transform: rotate(90deg);
+}
+.dialog.navigator .navigator-canvas .nav:hover {
+  color: var(--background);
+  background: var(--color);
+}
+.dialog.navigator .navigator-canvas .nav:hover svg path,
+.dialog.navigator .navigator-canvas .nav:hover svg line {
+  color: var(--background);
+  fill: var(--background);
+}
+.dialog.navigator .navigator-canvas .nav:hover svg circle {
+  stroke: var(--background);
+}
+.dialog.navigator .navigator-canvas .nav.nav-ok:hover:before {
+  background-color: var(--background);
+}
+.dialog.navigator .navigator-warning {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 5px;
+  background-color: rgba(255, 165, 0, 0.15);
+  border: 1px solid orange;
+  border-radius: 3px;
+  text-align: center;
+  font-size: 11px;
+  color: orange;
+}
+.dialog.navigator .navigator-warning.hidden {
+  display: none;
+}
+.dialog.status .dialog-body {
+  padding: 10px 0;
+  text-align: center;
+}
+.dialog.settings .dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dialog.settings .dialog-body .btn-action {
+  display: block;
+  padding: 6px 5px;
+}
+.dialog.editor {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+}
+.dialog.editor .dialog-body {
+  width: 100%;
+  height: calc(100% - 70px);
+  padding: 0;
+  overflow: hidden;
+}
+.dialog.editor .editor-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--background);
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.dialog.editor .line-numbers {
+  background-color: color-mix(in srgb, var(--background) 95%, var(--color) 5%);
+  border-right: 1px solid var(--light-color);
+  color: var(--light-color);
+  padding: 7px 8px;
+  text-align: right;
+  user-select: none;
+  white-space: pre;
+  overflow: hidden;
+}
+.dialog.editor .file-content {
+  flex: 1;
+  background-color: var(--background);
+  border: 0;
+  padding: 5px;
+  outline: 0;
+  resize: none;
+  font-family:
+    "DejaVu Sans Mono", "Consolas", "Menlo", "Courier New", "Lucida Console",
+    monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow: auto;
+}
+.dialog.upload {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 20px);
+  display: flex;
+  flex-direction: column;
+}
+.dialog.upload .dialog-body {
+  padding: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
+}
+.dialog.upload .upload-loading {
+  width: 350px;
+  border: 1px solid var(--color);
+  margin-bottom: 5px;
+  position: relative;
+  padding: 3px 7px;
+}
+.dialog.upload .dialog-body .upload-loading:last-child {
+  margin-bottom: 0;
+}
+.dialog.upload .upload-loading .bar {
+  width: 0;
+  background-color: var(--light-color);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+}
+.dialog.upload .upload-loading .upload-name {
+  z-index: 2;
+  position: relative;
+  font-weight: bold;
+}
+.hidden {
+  display: none !important;
+}
+.upload-area,
+.loading-area {
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.upload-area::before {
+  content: "Drop files here to upload them to current folder";
+  border: 3px dashed var(--color);
+  background-color: var(--background);
+  font-size: 24px;
+  padding: 20px;
+  height: 300px;
+  width: 300px;
+  text-align: center;
+  font-weight: bold;
+  vertical-align: center;
+  display: flex;
+  align-items: center;
+}
+.loading-area .text {
+  color: var(--color);
+  border: 1px solid var(--color);
+  padding: 10px 20px;
+  min-width: 250px;
+  text-align: center;
+  max-width: 350px;
+  background-color: var(--background);
+}
+.oinput-file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+.dialog.navigator .dialog-head div {
+  display: flex;
+  gap: 5px;
+}
+::selection {
+  background: var(--color);
+  color: var(--background);
+}
+#force-reload,
+#refresh-folder {
+  padding: 0;
+  height: 21px;
+  display: flex;
+  width: 21px;
+  justify-content: center;
+  align-items: center;
+  border: 0;
+}
+#force-reload svg path,
+#refresh-folder svg path {
+  fill: var(--background);
+}
+#force-reload:hover svg path,
+#refresh-folder:hover svg path {
+  fill: var(--color);
+  stroke: var(--background);
+}
+#force-reload.reloading svg path,
+#refresh-folder.reloading svg path {
+  animation: rotation 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes rotation {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 6px;
+  }
+  .container .header {
+    flex-wrap: wrap;
+  }
+  .container .header .title {
+    flex: 1 1 100%;
+    border-bottom: 1px solid var(--color);
+  }
+  .left-part,
+  .right-part {
+    text-align: center;
+  }
+  .container .header button {
+    width: auto;
+    min-width: 90px;
+  }
+  .container .free-space {
+    flex-direction: column;
+  }
+  .container .free-space .block-space {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--color);
+  }
+  .container .free-space .block-space:last-child {
+    border-bottom: 0;
+  }
+  .dialog .dialog-body input {
+    min-width: 0;
+  }
+  .dialog.upload .upload-loading {
+    width: 100%;
+  }
+  .upload-area::before {
+    width: auto;
+    height: auto;
+    max-width: 90vw;
+    font-size: 18px;
+    padding: 16px;
+  }
+  .loading-area .text {
+    min-width: 0;
+    max-width: 90vw;
+  }
+  .container .content .table .col-action {
+    width: 96px;
+  }
+  .container .content .table .col-size {
+    width: 64px;
+  }
+}
+
+
+/* Standalone USB-only shell. All Navigator selectors above are copied from the original WebUI stylesheet. */
+.usb-status { padding: 7px 12px; border-bottom: 1px solid var(--color); display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+.usb-intro { padding: 20px 16px; min-height: 210px; }
+.usb-intro h2 { font-size: 16px; margin:0 0 12px; }
+.usb-intro p { line-height: 1.7; max-width: 64ch; }
+.usb-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.usb-actions button { padding:6px 12px; }
+.usb-status-label { color:var(--color); }
+.usb-error { color: orange !important; }
+.dialog-background { z-index: 20; }
+.dialog.navigator { width:100%; }
+.dialog.navigator .nav-disabled { opacity: .40; pointer-events:none; }
+.dialog.navigator .nav { user-select:none; touch-action:manipulation; }
+.dialog.navigator .nav:focus-visible { outline:2px solid var(--color);outline-offset: -3px; }
+.dialog.navigator .dialog-body .usb-screen-holder { position:relative; display:flex; max-width:100%; justify-content:center; }
+.dialog.navigator #navigator-screen { max-width:100%; height:auto; display:block; image-rendering:pixelated; }
+#navigator-loading-overlay { position:absolute; inset:1px; background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center; font-size:14px; font-weight:bold; pointer-events:none; }
+.usb-nav-status { border-top:1px solid var(--color); padding:6px 10px; font-size:10px; text-align:center; overflow-wrap:anywhere; }
+#connection { white-space:nowrap; }
+.usb-body { display:flex;flex-direction:column;gap:12px; }
+.usb-section { padding: 12px; border:1px solid var(--color); }
+.usb-section > h3 { margin: 0 0 10px; font-size:13px; }
+.usb-section p { margin:6px 0 10px; }
+.usb-rows { display:flex;flex-wrap:wrap;align-items:center;gap:8px; margin:9px 0; }
+.usb-rows .btn-action { padding: 5px 8px; }
+.usb-rows label { min-width:65px; }
+.usb-rows output { min-width:36px;text-align:right; }
+.usb-rows input[type=range] { flex:1; min-width:90px; }
+.usb-rows input[type=color] { background:transparent;border:1px solid var(--color);width:52px;height:30px; }
+.usb-dialog-wide { width:min(550px,100%);max-width:calc(100vw - 20px); }
+.dialog.terminal { width:min(660px,100%);max-width:calc(100vw - 20px); }
+#console { max-height:240px; min-height:130px; overflow:auto; border:1px solid var(--color);padding:8px; white-space:pre-wrap;overflow-wrap:anywhere; font-size:11px; }
+#commandForm { display:flex;gap:8px;margin-top:8px; }
+#commandText { min-width:0;flex:1;background:var(--background);border:1px solid var(--color);padding:6px; }
+#send { padding:5px 12px; }
+.usb-settings { padding:10px;max-height:65vh;overflow-y:auto; }
+.usb-settings .btn-action {display:inline-block !important;}
+.usb-help {font-size:11px;line-height:1.7;opacity:.9;}
+#message {font-size:11px;line-height:1.6;}
+@media (max-width:550px) {
+  .dialog.navigator .dialog-head {gap:5px;flex-wrap:wrap;}
+  .dialog.navigator .dialog-head select { max-width:180px; }
+  .usb-status { gap:7px; }
+}
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title" title="Fush OS">Fush [<span class="bruce-version">USB</span>]</div>
+      <div class="left-part">
+        <button class="btn-action" data-open="terminal">Serial Cmd</button>
+        <button class="btn-action act-navigation" id="openNavigator">Navigator</button>
+      </div>
+      <div class="right-part">
+        <button class="btn-action" data-open="settings">Settings</button>
+        <button class="btn-action" id="connect">Connect USB</button>
+        <button class="btn-action" id="disconnect" disabled>Disconnect</button>
+      </div>
+    </div>
+    <div class="usb-status"><span id="connection" class="usb-status-label">● Disconnected</span><span>USB OTG · Web Serial · 115200 baud</span></div>
+    <div class="usb-intro">
+      <h2>Device Navigator — USB</h2>
+      <p>This is the <strong>original Fush WebUI Navigator layout</strong> running over USB serial instead of Wi-Fi. Use the same device screen, nine-button pad, keyboard shortcuts, refresh and automatic reload.</p>
+      <div class="usb-actions">
+        <button class="btn-action btn-default" id="openNavigatorSecondary">Open Device Navigator</button>
+        <button class="btn-action" data-open="terminal">Serial Command</button>
+        <button class="btn-action" data-open="settings">Control Settings</button>
+      </div>
+      <p class="usb-help" id="message">Use desktop Chrome or Edge on localhost. Connect an ESP32-S3 USB data cable and choose the serial port.</p>
+      <p class="usb-help">USB Navigator requires the updated Fush OS firmware supporting <code>fush navigator start</code>, <code>fush nav</code> and <code>fush screen</code>. The original Wi-Fi file explorer is not included in this USB Navigator page.</p>
+    </div>
+  </div>
+  <div class="dialog-background hidden">
+    <div class="dialog navigator hidden">
+<div class="dialog-head">
+<span>Device Navigator</span>
+<div>
+<button class="btn-action" id="force-reload">
+<svg height="18" viewbox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M21 12C21 16.9706 16.9706 21 12 21C9.69494 21 7.59227 20.1334 6 18.7083L3 16M3 12C3 7.02944 7.02944 3 12 3C14.3051 3 16.4077 3.86656 18 5.29168L21 8M3 21V16M3 16H8M21 3V8M21 8H16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<select id="navigator-auto-reload">
+<option value="0">Reload After Navigate</option>
+<option value="1000">Auto Reload: 1s</option>
+<option value="2000">Auto Reload: 2s</option>
+<option value="5000">Auto Reload: 5s</option>
+<option value="10000">Auto Reload: 10s</option>
+</select>
+</div>
+</div>
+<div class="dialog-body">
+<div class="navigator-warning hidden" id="wifi-warning">
+            ⚠️ Wi-Fi tasks may stop the wireless WebUI; USB control stays available
+          </div>
+<div class="usb-screen-holder"><canvas id="navigator-screen" width="320" height="240"></canvas><div id="navigator-loading-overlay" class="hidden">Navigating...</div></div>
+<div class="navigator-canvas">
+<div class="p-up">
+<div class="nav nav-page-up" data-direction="NextPage" title="Next Page" role="button" tabindex="0">
+<svg fill="none" height="18" viewbox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M15.5 12L5.72222 19.1111L5.72222 4.88889L15.5 12Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.77778"></path>
+<line stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.77778" x1="18.1667" x2="18.1667" y1="4.88889" y2="19.1111"></line>
+</svg>
+</div>
+<div class="nav nav-up" data-direction="Up" title="Up" role="button" tabindex="0">
+<svg height="18" viewbox="0 0 52 52" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="nav nav-menu" data-direction="Menu" title="Long Press" role="button" tabindex="0">
+<svg height="18" viewbox="0 0 256 256" width="18" xmlns="http://www.w3.org/2000/svg">
+<circle cx="128" cy="128" id="path822" r="40" stroke="currentColor" style="
+                      fill: none;
+                      stroke-width: 16;
+                      stroke-linecap: round;
+                      stroke-linejoin: round;
+                      stroke-miterlimit: 4;
+                      stroke-dasharray: none;
+                      stroke-opacity: 1;
+                    "></circle>
+<circle cx="128" cy="128" id="path823" r="112" stroke="currentColor" style="
+                      fill: none;
+                      stroke-width: 16;
+                      stroke-linecap: round;
+                      stroke-linejoin: round;
+                      stroke-miterlimit: 4;
+                      stroke-dasharray: none;
+                      stroke-opacity: 1;
+                    "></circle>
+</svg>
+</div>
+</div>
+<div class="p-mid">
+<div class="nav nav-left" data-direction="Prev" title="Left" role="button" tabindex="0">
+<svg height="18" viewbox="0 0 52 52" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="nav nav-ok" data-direction="Sel" title="Select/OK" role="button" tabindex="0"></div>
+<div class="nav nav-right" data-direction="Next" title="Right" role="button" tabindex="0">
+<svg height="18" viewbox="0 0 52 52" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z" fill="currentColor"></path>
+</svg>
+</div>
+</div>
+<div class="p-bot">
+<div class="nav nav-page-down" data-direction="PrevPage" title="Previous Page" role="button" tabindex="0">
+<svg fill="none" height="18" viewbox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M15.5 12L5.72222 19.1111L5.72222 4.88889L15.5 12Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.77778"></path>
+<line stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.77778" x1="18.1667" x2="18.1667" y1="4.88889" y2="19.1111"></line>
+</svg>
+</div>
+<div class="nav nav-down" data-direction="Down" title="Down" role="button" tabindex="0">
+<svg height="18" viewbox="0 0 52 52" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="nav" data-direction="Esc" title="Back" role="button" tabindex="0">
+<svg height="18" version="1.1" viewbox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<path d="M3.07615,5.61732 C3.23093,5.24364 3.59557,5 4.00003,5 L13.9999996,5 C17.866,5 20.9999996,8.13401 20.9999996,12 C20.9999996,15.866 17.866,19 13.9999996,19 L5.00003,19 C4.44774,19 4.00003,18.5523 4.00003,18 C4.00003,17.4477 4.44774,17 5.00003,17 L13.9999996,17 C16.7615,17 18.9999996,14.7614 18.9999996,12 C18.9999996,9.23858 16.7615,7 13.9999996,7 L6.41424,7 L8.20714,8.79289 C8.59766,9.18342 8.59766,9.81658 8.20714,10.2071 C7.81661,10.5976 7.18345,10.5976 6.79292,10.2071 L3.29292,6.70711 C3.00692,6.42111 2.92137,5.99099 3.07615,5.61732 Z" fill="currentColor"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+<div class="usb-nav-status"> <span id="nav-status">Navigator not started</span> · <span id="screen-dimensions">320 × 240</span></div>
+<div class="dialog-footer">
+<button class="btn-action" data-open="navigator-shortcut">
+            Shortcut
+          </button>
+<button class="btn-action act-dialog-close act-escape">Close</button>
+</div>
+</div>
+    <div class="dialog navigator-shortcut hidden">
+<div class="dialog-head">Navigator Shortcut</div>
+<div class="dialog-body">
+<p>
+            You can use a keyboard for navigating instead of the on-screen
+            buttons
+          </p>
+<ul>
+<li>Navigating = Arrow Keys</li>
+<li>Back = Backspace</li>
+<li>OK = Enter</li>
+<li>Long Press = M</li>
+<li>Page Up = Page Up</li>
+<li>Page Down = Page Down</li>
+<li>Close Navigator = Escape</li>
+<li>Reload Screen = R</li>
+</ul>
+</div>
+<div class="dialog-footer">
+<button class="btn-action act-escape" data-open="navigator">
+            Close
+          </button>
+</div>
+</div>
+    <div class="dialog settings usb-dialog-wide hidden">
+      <div class="dialog-head">Settings</div>
+      <div class="dialog-body usb-settings usb-body">
+        <button class="btn-action act-hide-show-navigating" id="overlayToggle" type="button">'Navigating...' Overlay</button>
+        <section class="usb-section"><h3>Control Mode</h3><p class="usb-help">USB control works without a Wi-Fi connection. Hybrid keeps both connection methods available.</p><div class="usb-rows"><button class="btn-action" data-command="fush mode usb">USB Only</button><button class="btn-action" data-command="fush mode hybrid">Hybrid (USB + Wi-Fi)</button><button class="btn-action" data-command="fush mode status">Status</button></div></section>
+        <section class="usb-section"><h3>Onboard RGB LED</h3><div class="usb-rows" id="swatches"></div><div class="usb-rows"><label for="custom">Colour</label><input type="color" id="custom" value="#ff5000"><button class="btn-action" id="applyColor">Apply</button><button class="btn-action" data-command="led rainbow">Rainbow</button><button class="btn-action" data-command="led off">Off</button></div><div class="usb-rows"><label for="brightness">Brightness</label><input type="range" min="0" max="16" value="10" id="brightness"><output id="brightVal">10%</output><button class="btn-action" id="applyBrightness">Apply</button></div><div class="usb-rows"><label for="speed">Speed</label><input type="range" min="1" max="10" value="5" id="speed"><output id="speedVal">5</output><button class="btn-action" id="applySpeed">Apply</button></div><p class="usb-help">LED speed requires the Hybrid firmware command.</p></section>
+        <section class="usb-section"><h3>Navigator Theme</h3><p class="usb-help">Original Fush default WebUI CSS is used. If your Wi-Fi WebUI uses a custom colour theme, you can match its colour here.</p><div class="usb-rows"><label for="ui-accent">Accent</label><input type="color" value="#ff3ec8" id="ui-accent"><button class="btn-action" id="resetTheme">Default</button></div></section>
+      </div>
+      <div class="dialog-footer"><button class="btn-action act-dialog-close act-escape">Close</button></div>
+    </div>
+    <div class="dialog terminal hidden">
+      <div class="dialog-head">Serial Command</div>
+      <div class="dialog-body">
+        <div id="console" role="log" aria-live="polite">Ready. Connect USB to begin.
+</div>
+        <form id="commandForm"><input id="commandText" type="text" placeholder="Type a supported Fush command" autocomplete="off" aria-label="Serial command"><button class="btn-action btn-default" id="send" type="submit">Run</button></form>
+        <p class="usb-help">USB commands use the existing serial command interface.</p>
+      </div>
+      <div class="dialog-footer"><button class="btn-action act-dialog-close act-escape">Close</button></div>
+    </div>
+  </div>
+  <script>
+  
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let port = null, reader = null, readTask = null;
+  let connected = false, navigatorEnabled = false, awaitingScreen = false;
+  let screenBuffer = '', screenFrame = null, refreshQueued = false;
+  let sendQueue = Promise.resolve(), snapshotTimeout = null, autoTimer = null;
+  let showOverlay = localStorage.getItem('fushUsbOverlay') === 'true';
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const consoleNode = $('console');
+  const canvas = $('navigator-screen');
+  const ctx = canvas.getContext('2d');
+  const allNavButtons = [...document.querySelectorAll('.navigator-canvas .nav[data-direction]')];
+  const supported = 'serial' in navigator && window.isSecureContext;
+  const initialMessage = 'Desktop Chrome or Edge · USB data cable · 115200 baud';
+
+  function log(text) {
+    consoleNode.textContent += text;
+    if (consoleNode.textContent.length > 24000) consoleNode.textContent = consoleNode.textContent.slice(-20000);
+    consoleNode.scrollTop = consoleNode.scrollHeight;
+  }
+  function setMessage(text) { $('message').textContent = text; }
+  function navStatus(text) { $('nav-status').textContent = text; }
+  function updateUI() {
+    $('connect').disabled = connected || !supported;
+    $('disconnect').disabled = !connected;
+    $('connection').textContent = connected ? '● USB connected' : '● Disconnected';
+    $('connection').style.opacity = connected ? '1' : '.7';
+    document.querySelectorAll('[data-command]').forEach(b => b.disabled = !connected);
+    ['applyColor', 'applyBrightness', 'applySpeed', 'send'].forEach(id => $(id).disabled = !connected);
+    $('force-reload').disabled = !connected || !navigatorEnabled;
+    allNavButtons.forEach(b => {
+      b.classList.toggle('nav-disabled', !connected || !navigatorEnabled);
+      b.setAttribute('aria-disabled', String(!connected || !navigatorEnabled));
+    });
+  }
+  function showDialog(name) {
+    document.querySelectorAll('.dialog-background > .dialog').forEach(el => el.classList.add('hidden'));
+    document.querySelector('.dialog-background')?.classList.remove('hidden');
+    const el = document.querySelector('.dialog-background > .dialog.' + name);
+    if (el) el.classList.remove('hidden');
+  }
+  function hideDialogs() {
+    document.querySelector('.dialog-background')?.classList.add('hidden');
+    document.querySelectorAll('.dialog-background > .dialog').forEach(el => el.classList.add('hidden'));
+  }
+  function showLoadingOverlay(visible) {
+    $('navigator-loading-overlay').classList.toggle('hidden', !(visible && showOverlay));
+  }
+  function updateOverlayButton() {
+    $('overlayToggle').textContent = "'Navigating...' Overlay\n" + (showOverlay ? 'Shown' : 'Hidden') + ' (click to toggle)';
+  }
+  function clearTiming() {
+    clearTimeout(snapshotTimeout); snapshotTimeout = null;
+    clearTimeout(autoTimer); autoTimer = null;
+    awaitingScreen = false; screenFrame = null; refreshQueued = false; showLoadingOverlay(false);
+  }
+  function stopSessionLocal() {
+    clearTiming(); navigatorEnabled = false;
+    updateUI(); navStatus('Navigator stopped');
+  }
+
+  async function readLoop() {
+    try {
+      while (connected && port && port.readable) {
+        reader = port.readable.getReader();
+        try {
+          while (connected) {
+            const {value, done} = await reader.read();
+            if (done) break;
+            if (value) acceptText(decoder.decode(value, {stream: true}));
+          }
+        } finally { reader.releaseLock(); reader = null; }
+        if (!connected) break;
+      }
+    } catch (error) { log('\n[USB receive ended] ' + (error.message || error) + '\n'); }
+    if (connected) {
+      connected = false;
+      stopSessionLocal();
+      setMessage('USB connection ended. Reconnect to continue.');
+      try { if (port) await port.close(); } catch (_) {}
+      port = null;
+    }
+  }
+  async function connect() {
+    if (!supported) {
+      setMessage('Web Serial unavailable. Use desktop Chrome/Edge on HTTPS or localhost.');
+      return;
+    }
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({baudRate: 115200});
+      connected = true; updateUI();
+      setMessage('Connected. Open Navigator to view and control the device menu.');
+      log('\n[USB connected at 115200 baud]\n');
+      readTask = readLoop();
+    } catch (error) {
+      setMessage('Connect failed: ' + (error.message || error));
+      connected = false; port = null; updateUI();
+    }
+  }
+  async function disconnect() {
+    if (connected && navigatorEnabled) await send('fush navigator stop');
+    connected = false; stopSessionLocal();
+    try { if (reader) await reader.cancel(); } catch (_) {}
+    try { if (readTask) await readTask; } catch (_) {}
+    try { if (port) await port.close(); } catch (_) {}
+    readTask = null; port = null; setMessage('Disconnected.');
+  }
+  function send(command) {
+    const cmd = String(command).trim();
+    if (!cmd || !connected) return Promise.resolve(false);
+    const job = sendQueue.then(async () => {
+      if (!connected || !port || !port.writable) return false;
+      log('\n> ' + cmd + '\n');
+      const writer = port.writable.getWriter();
+      try { await writer.write(encoder.encode(cmd + '\n')); return true; }
+      finally { writer.releaseLock(); }
+    });
+    sendQueue = job.catch(error => {
+      log('[USB send failed] ' + (error.message || error) + '\n');
+      setMessage('USB command failed.');
+    });
+    return job.catch(() => false);
+  }
+  function acceptText(text) {
+    screenBuffer += text;
+    if (screenBuffer.length > 64000) screenBuffer = screenBuffer.slice(-4096);
+    let newline;
+    while ((newline = screenBuffer.indexOf('\n')) >= 0) {
+      const line = screenBuffer.slice(0, newline).replace(/\r$/, '');
+      screenBuffer = screenBuffer.slice(newline + 1);
+      if (!processNavigatorLine(line)) log(line + '\n');
+    }
+  }
+  function failSnapshot(message) {
+    awaitingScreen = false; screenFrame = null; showLoadingOverlay(false);
+    clearTimeout(snapshotTimeout); snapshotTimeout = null;
+    navStatus(message);
+    if (refreshQueued) { refreshQueued = false; setTimeout(requestScreen, 150); }
+    else scheduleAutoRefresh();
+  }
+  function processNavigatorLine(line) {
+    if (!line.startsWith('@FUSHNAV:')) return false;
+    const begin = /^@FUSHNAV:BEGIN:(\d+):(\d+)$/.exec(line);
+    if (begin) {
+      const size = Number(begin[2]);
+      if (!size || size > 32768) { failSnapshot('Invalid snapshot size'); return true; }
+      screenFrame = {sequence: begin[1], bytes: [], expected: size};
+      navStatus('Receiving screen (' + size + ' bytes)…');
+      return true;
+    }
+    const data = /^@FUSHNAV:DATA:(\d+):([0-9A-F]+)$/.exec(line);
+    if (data) {
+      if (!screenFrame || data[1] !== screenFrame.sequence) return true;
+      const hex = data[2];
+      if (hex.length % 2 || screenFrame.bytes.length + hex.length/2 > screenFrame.expected) {
+        failSnapshot('Screen data overflow'); return true;
+      }
+      for (let i=0; i<hex.length; i+=2) screenFrame.bytes.push(parseInt(hex.slice(i,i+2),16));
+      return true;
+    }
+    const end = /^@FUSHNAV:END:(\d+):([0-9A-F]{8})$/.exec(line);
+    if (end) {
+      if (!screenFrame || end[1] !== screenFrame.sequence) {
+        failSnapshot('Screen sequence mismatch'); return true;
+      }
+      const frame = screenFrame;
+      if (frame.bytes.length !== frame.expected) {
+        failSnapshot('Incomplete USB screen. Try Refresh.'); return true;
+      }
+      const bytes = Uint8Array.from(frame.bytes);
+      let hash = 2166136261;
+      for (const byte of bytes) hash = Math.imul((hash ^ byte) >>> 0, 16777619) >>> 0;
+      if (hash.toString(16).toUpperCase().padStart(8,'0') !== end[2]) {
+        failSnapshot('USB frame checksum mismatch. Try Refresh.'); return true;
+      }
+      clearTimeout(snapshotTimeout); snapshotTimeout = null;
+      awaitingScreen = false; screenFrame = null; showLoadingOverlay(false);
+      try { const result=renderScreen(bytes); navStatus('Screen updated · ' + bytes.length + ' bytes' + (result.images ? ' · '+result.images+' image(s) shown as placeholders' : '')); }
+      catch (error) { navStatus('Screen decode error: ' + (error.message || error)); }
+      if (refreshQueued) { refreshQueued = false; setTimeout(requestScreen, 140); }
+      else scheduleAutoRefresh();
+      return true;
+    }
+    return true; // Hide protocol messages from normal terminal.
+  }
+
+  function scheduleAutoRefresh() {
+    clearTimeout(autoTimer); autoTimer = null;
+    const delay = Number($('navigator-auto-reload').value);
+    if (connected && navigatorEnabled && delay >= 1000) {
+      autoTimer = setTimeout(requestScreen, delay);
+    }
+  }
+  async function requestScreen() {
+    if (!connected || !navigatorEnabled) return;
+    if (awaitingScreen) { refreshQueued = true; return; }
+    clearTimeout(autoTimer); autoTimer = null;
+    awaitingScreen = true; screenFrame = null;
+    navStatus('Requesting screen…'); showLoadingOverlay(true);
+    snapshotTimeout = setTimeout(() => failSnapshot('No screen response — check Navigator firmware'), 12000);
+    const sent = await send('fush screen');
+    if (!sent) { failSnapshot('Could not request USB screen'); return; }
+  }
+  async function startNavigator() {
+    if (!connected || navigatorEnabled) return;
+    navigatorEnabled = true; updateUI(); navStatus('Starting USB Navigator…');
+    await send('fush navigator start');
+    setTimeout(requestScreen, 280);
+  }
+  async function stopNavigator() {
+    if (connected && navigatorEnabled) await send('fush navigator stop');
+    stopSessionLocal();
+  }
+  function navKey(key, hold = 90) {
+    if (!connected || !navigatorEnabled) return;
+    const duration = Math.min(1500, Math.max(50, Number(hold) || 90));
+    send('fush nav ' + key + ' ' + duration).then(() => {
+      if (navigatorEnabled) setTimeout(requestScreen, 220);
+    });
+  }
+  const keymap = {ArrowUp:'up', ArrowDown:'down', ArrowLeft:'prev', ArrowRight:'next',
+    Enter:'sel', Backspace:'esc', m:'menu', M:'menu', PageUp:'nextpage', PageDown:'prevpage'};
+  window.addEventListener('keydown', event => {
+    const open = document.querySelector('.dialog-background > .dialog:not(.hidden)');
+    if (!open) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (open.classList.contains('navigator-shortcut')) showDialog('navigator');
+      else { if (open.classList.contains('navigator')) closeNavigator(); hideDialogs(); }
+      return;
+    }
+    if (!open.classList.contains('navigator') || !connected || !navigatorEnabled) return;
+    if (event.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (event.key.toLowerCase() === 'r') { event.preventDefault(); requestScreen(); return; }
+    const key = keymap[event.key];
+    if (!key) return;
+    event.preventDefault();
+    if (event.repeat) return;
+    navKey(key, key === 'menu' ? 500 : 90);
+  });
+  function color565(num) {
+    const red = Math.round(((num >> 11) & 31) * 255 / 31);
+    const green = Math.round(((num >> 5) & 63) * 255 / 63);
+    const blue = Math.round((num & 31) * 255 / 31);
+    return `rgb(${red},${green},${blue})`;
+  }
+  function paintRoundedRect(c, x, y, width, height, radius, fill) {
+    const r = Math.max(0, Math.min(radius, Math.abs(width)/2, Math.abs(height)/2));
+    c.beginPath(); c.moveTo(x+r,y);
+    c.arcTo(x+width,y,x+width,y+height,r);
+    c.arcTo(x+width,y+height,x,y+height,r);
+    c.arcTo(x,y+height,x,y,r);
+    c.arcTo(x,y,x+width,y,r);
+    c.closePath();
+    if (fill) c.fill(); else c.stroke();
+  }
+  function renderScreen(bytes) {
+    const first = document.createElement('canvas');
+    first.width = canvas.width || 320; first.height = canvas.height || 240;
+    const c = first.getContext('2d');
+    c.fillStyle = '#070d19'; c.fillRect(0,0,first.width,first.height);
+    let offset = 0, drawCalls = 0, imageCount = 0, screenText = [];
+    while (offset + 3 <= bytes.length) {
+      if (bytes[offset] !== 0xAA) throw new Error('Invalid draw packet at ' + offset);
+      const size = bytes[offset + 1];
+      const op = bytes[offset + 2];
+      if (size < 3 || offset + size > bytes.length) throw new Error('Truncated draw packet');
+      const end = offset + size;
+      let cursor = offset + 3;
+      const u8 = () => { if (cursor >= end) throw new Error('Bad packet'); return bytes[cursor++]; };
+      const u16 = () => { const h = u8(); return (h << 8) | u8(); };
+      const coord = () => { const n = u16(); return n >= 32768 ? n - 65536 : n; };
+      const str = () => new TextDecoder().decode(bytes.slice(cursor,end));
+      c.lineWidth=1; c.strokeStyle='#fff'; c.fillStyle='#fff';
+      switch(op) {
+        case 99: {
+          const w = u16(), h = u16(); u8();
+          if (w > 0 && h > 0 && w <= 2048 && h <= 2048 && (first.width !== w || first.height !== h)) {
+            first.width=w; first.height=h;
+            c.fillStyle='#070d19'; c.fillRect(0,0,w,h);
+          }
+          break;
+        }
+        case 0: { c.fillStyle=color565(u16()); c.fillRect(0,0,first.width,first.height); break; }
+        case 1: case 2: { const x=coord(), y=coord(),w=u16(),h=u16(); c[op===1?'strokeStyle':'fillStyle']=color565(u16()); if(op===1)c.strokeRect(x,y,w,h);else c.fillRect(x,y,w,h);break; }
+        case 3: case 4: { const x=coord(),y=coord(),w=u16(),h=u16(),r=u16();c[op===3?'strokeStyle':'fillStyle']=color565(u16());paintRoundedRect(c,x,y,w,h,r,op===4);break; }
+        case 5: case 6: { const x=coord(),y=coord(),r=u16(); c[op===5?'strokeStyle':'fillStyle']=color565(u16());c.beginPath();c.arc(x,y,Math.max(0,r),0,Math.PI*2);if(op===5)c.stroke();else c.fill();break; }
+        case 7: case 8: {const x=coord(),y=coord(),x2=coord(),y2=coord(),x3=coord(),y3=coord();c[op===7?'strokeStyle':'fillStyle']=color565(u16());c.beginPath();c.moveTo(x,y);c.lineTo(x2,y2);c.lineTo(x3,y3);c.closePath();if(op===7)c.stroke();else c.fill();break;}
+        case 9: case 10: {const x=coord(),y=coord(),rx=u16(),ry=u16();c[op===9?'strokeStyle':'fillStyle']=color565(u16());c.beginPath();c.ellipse(x,y,Math.max(0,rx),Math.max(0,ry),0,0,Math.PI*2);if(op===9)c.stroke();else c.fill();break;}
+        case 11: {const x=coord(),y=coord(),x1=coord(),y1=coord();c.strokeStyle=color565(u16());c.beginPath();c.moveTo(x,y);c.lineTo(x1,y1);c.stroke();break;}
+        case 12: {const x=coord(),y=coord(),r=u16(),ir=u16(),start=u16(),stop=u16(),fg=u16();u16();c.strokeStyle=color565(fg);c.lineWidth=Math.max(1,r-ir);c.beginPath();c.arc(x,y,(r+ir)/2,(start+90)*Math.PI/180,(stop+90)*Math.PI/180);c.stroke();break;}
+        case 13: {const x=coord(),y=coord(),bx=coord(),by=coord(),wd=u16(),fg=u16();u16();c.strokeStyle=color565(fg);c.lineWidth=Math.max(1,wd);c.beginPath();c.moveTo(x,y);c.lineTo(bx,by);c.stroke();break;}
+        case 14:case 15:case 16:case 17: {const x=coord(),y=coord(),size=u16(),fg=u16(),bg=u16(),txt=str().replaceAll('\\n','');c.font=Math.max(8,size*8)+'px monospace';c.textBaseline='top';c.textAlign=op===14?'center':op===15?'right':'left';screenText.push(txt);const width=c.measureText(txt).width;const left=op===14?x-width/2:op===15?x-width:x;if(bg!==fg){c.fillStyle=color565(bg);c.fillRect(left,y,width,size*8);}c.fillStyle=color565(fg);c.fillText(txt,x,y);break;}
+        case 18: {const x=coord(),y=coord();u16();u16();u8();const filename=str();imageCount++;c.fillStyle='#8b9bb1';c.font='10px monospace';c.textAlign='left';c.textBaseline='top';c.fillText('[image] '+filename.split('/').pop(),x,y);break;}
+        case 19: {const x=coord(),y=coord();c.fillStyle=color565(u16());c.fillRect(x,y,1,1);break;}
+        case 20: {const x=coord(),y=coord(),h=u16();c.fillStyle=color565(u16());c.fillRect(x,y,1,h);break;}
+        case 21: {const x=coord(),y=coord(),w=u16();c.fillStyle=color565(u16());c.fillRect(x,y,w,1);break;}
+        default: throw new Error('Unsupported draw operation: ' + op);
+      }
+      offset += size; drawCalls++;
+    }
+    if (offset !== bytes.length) throw new Error('Trailing screen bytes');
+    if (canvas.width!==first.width) canvas.width=first.width;
+    if (canvas.height!==first.height) canvas.height=first.height;
+    ctx.drawImage(first,0,0);
+    // Image log entries refer to external storage files; USB-only mode shows their paths as placeholders.
+    $('screen-dimensions').textContent = first.width + ' × ' + first.height;
+    const hasWifiMenu = /wifi|evil portal|deauth|handshake/i.test(screenText.join(' '));
+    $('wifi-warning').classList.toggle('hidden', !hasWifiMenu);
+    return {drawCalls, images:imageCount};
+  }
+
+  const presets = [
+    ['Red','#ff0000','led red'],['Orange','#ff5000','led orange'],
+    ['Green','#00ff00','led green'],['Blue','#0000ff','led blue'],
+    ['Yellow','#ffff00','led yellow'],['Cyan','#00ffff','led cyan'],
+    ['Magenta','#ff00ff','led magenta'],['White','#ffffff','led white']
+  ];
+  for(const [label,color,command] of presets) {
+    const b=document.createElement('button');b.type='button';b.className='btn-action';b.dataset.command=command;
+    b.textContent=label;b.style.borderBottom='3px solid '+color;$('swatches').appendChild(b);
+  }
+  document.querySelectorAll('[data-command]').forEach(b=>b.addEventListener('click',()=>send(b.dataset.command)));
+  $('connect').addEventListener('click',connect);
+  $('disconnect').addEventListener('click',()=>{ if(document.querySelector('.dialog.navigator:not(.hidden)'))hideDialogs(); disconnect(); });
+  async function openNavigator() {
+    if (!connected) { setMessage('Connect USB first, then open Navigator.'); return; }
+    showDialog('navigator');
+    if (!navigatorEnabled) await startNavigator();
+    else await requestScreen();
+  }
+  async function closeNavigator() {
+    if (navigatorEnabled) await stopNavigator();
+  }
+  $('openNavigator').addEventListener('click',openNavigator);
+  $('openNavigatorSecondary').addEventListener('click',openNavigator);
+  document.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',()=>showDialog(el.dataset.open)));
+  document.querySelectorAll('.act-dialog-close').forEach(el=>el.addEventListener('click',()=>{
+    if (el.closest('.dialog').classList.contains('navigator')) closeNavigator();
+    hideDialogs();
+  }));
+  // Match the Wi-Fi Navigator's original icon-based 9-button pad.
+  allNavButtons.forEach(el=>el.addEventListener('click',()=>{
+    const direction = el.dataset.direction.toLowerCase();
+    navKey(direction, direction === 'menu' ? 500 : 90);
+  }));
+  $('force-reload').addEventListener('click',requestScreen);
+  const oldReload = sessionStorage.getItem('fushUsbAutoReload') || '0';
+  if ([...$('navigator-auto-reload').options].some(o=>o.value===oldReload)) $('navigator-auto-reload').value=oldReload;
+  $('navigator-auto-reload').addEventListener('change',()=>{
+    sessionStorage.setItem('fushUsbAutoReload',$('navigator-auto-reload').value);
+    scheduleAutoRefresh();
+  });
+  $('overlayToggle').addEventListener('click',()=>{
+    showOverlay=!showOverlay;
+    localStorage.setItem('fushUsbOverlay',String(showOverlay));
+    updateOverlayButton();
+    if (!showOverlay) showLoadingOverlay(false);
+  });
+  updateOverlayButton();
+  $('applyColor').addEventListener('click',()=>{
+    const hex=$('custom').value;
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+    send('led rgb '+[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)).join(' '));
+  });
+  $('brightness').addEventListener('input',()=>{$('brightVal').textContent=$('brightness').value+'%';});
+  $('speed').addEventListener('input',()=>{$('speedVal').textContent=$('speed').value;});
+  $('applyBrightness').addEventListener('click',()=>send('led brightness '+$('brightness').value));
+  $('applySpeed').addEventListener('click',()=>send('led speed '+$('speed').value));
+  $('commandForm').addEventListener('submit',e=>{e.preventDefault();send($('commandText').value);$('commandText').value='';});
+  $('ui-accent').addEventListener('input', e=>{
+    document.documentElement.style.setProperty('--color',e.target.value);
+    localStorage.setItem('fushUsbTheme',e.target.value);
+  });
+  $('resetTheme').addEventListener('click',()=>{
+    document.documentElement.style.removeProperty('--color');
+    localStorage.removeItem('fushUsbTheme');
+    $('ui-accent').value='#ff3ec8';
+  });
+  const storedTheme=localStorage.getItem('fushUsbTheme');
+  if (storedTheme && /^#[0-9a-f]{6}$/i.test(storedTheme)){
+    document.documentElement.style.setProperty('--color',storedTheme);
+    $('ui-accent').value=storedTheme;
+  }
+  ctx.fillStyle='#242424';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#ff3ec8';ctx.font='12px monospace';ctx.textAlign='center';
+  ctx.fillText('Connect USB to start',canvas.width/2,canvas.height/2);
+  if (!supported) setMessage('Web Serial requires desktop Chrome/Edge and a secure page (HTTPS or localhost).');
+  else setMessage(initialMessage);
+  updateUI();
+})();
+
+  </script>
+</body>
+</html>
