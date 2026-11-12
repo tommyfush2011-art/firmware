@@ -335,6 +335,31 @@
           >
             Change WebUI Credentials
           </button>
+          <section class="fush-led-controls hidden" aria-label="Fush RGB LED controls">
+            <strong>Onboard RGB LED</strong>
+            <div class="fush-led-presets">
+              <button class="btn-action" onclick="setFushLed('red')">Red</button>
+              <button class="btn-action" onclick="setFushLed('orange')">Orange</button>
+              <button class="btn-action" onclick="setFushLed('green')">Green</button>
+              <button class="btn-action" onclick="setFushLed('blue')">Blue</button>
+              <button class="btn-action" onclick="setFushLed('white')">White</button>
+              <button class="btn-action" onclick="setFushLed('rainbow')">Rainbow</button>
+              <button class="btn-action" onclick="setFushLed('off')">Off</button>
+            </div>
+            <label for="fush-led-picker">Custom LED colour</label>
+            <div class="fush-led-row">
+              <input id="fush-led-picker" type="color" value="#ff5000" />
+              <button class="btn-action" onclick="applyFushLedColor()">Set colour</button>
+            </div>
+            <label for="fush-led-brightness">Brightness (0–16%)</label>
+            <div class="fush-led-row">
+              <input id="fush-led-brightness" type="range" min="0" max="16" value="16"
+                     oninput="document.getElementById('fush-led-brightness-value').textContent = this.value + '%'" />
+              <span id="fush-led-brightness-value">16%</span>
+              <button class="btn-action" onclick="applyFushLedBrightness()">Set brightness</button>
+            </div>
+            <small id="fush-led-status" role="status" aria-live="polite"></small>
+          </section>
           <button class="btn-action act-hide-show-navigating"></button>
           <button class="btn-action act-reboot">Reboot</button>
         </div>
