@@ -582,3 +582,14 @@ svg > path {
     width: 64px;
   }
 }
+
+
+/* Fush RGB LED controls in Settings */
+.fush-led-controls { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 12px; border: 1px solid var(--color); border-radius: 8px; }
+.fush-led-controls.hidden { display: none; }
+.fush-led-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.fush-led-presets .btn-action { flex: 1 0 27%; }
+.fush-led-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fush-led-row input[type="range"] { flex: 1; min-width: 90px; }
+.fush-led-row input[type="color"] { width: 50px; height: 34px; }
+#fush-led-status { display: block; overflow-wrap: anywhere; }
