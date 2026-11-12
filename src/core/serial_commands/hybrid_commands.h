@@ -4,5 +4,7 @@
 #include <SimpleCLI.h>
 
 void createHybridCommands(SimpleCLI *cli);
+// Keeps screen logging running when Wi-Fi WebUI closes but USB Navigator is active.
+bool fushUsbNavigatorActive();
 
-#endif // FUSH_HYBRID_COMMANDS_H
+#endif
