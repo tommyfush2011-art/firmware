@@ -3,6 +3,7 @@
 #include "core/sd_functions.h"
 #include "crypto_commands.h"
 #include "gpio_commands.h"
+#include "hybrid_commands.h"
 #include "interpreter_commands.h"
 #include "ir_commands.h"
 #include "led_commands.h"
@@ -46,6 +47,7 @@ void SerialCli::setup() {
     createStorageCommands(&_cli);
     createUtilCommands(&_cli);
     createWifiCommands(&_cli);
+    createHybridCommands(&_cli);
 
 #ifdef USB_as_HID
     createBadUsbCommands(&_cli);
