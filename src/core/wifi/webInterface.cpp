@@ -460,7 +460,12 @@ void configureWebServer() {
     // System Info
     server->on("/systeminfo", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (checkUserWebAuth(request)) {
-            char response_body[300];
+            char response_body[360];
+#ifdef HAS_RGB_LED
+            const char *rgbLedAvailable = "true";
+#else
+            const char *rgbLedAvailable = "false";
+#endif
             uint64_t LittleFSTotalBytes = LittleFS.totalBytes();
             uint64_t LittleFSUsedBytes = LittleFS.usedBytes();
             uint64_t SDTotalBytes = SD.totalBytes();
@@ -469,7 +474,7 @@ void configureWebServer() {
                 response_body,
                 sizeof(response_body),
                 "{\"%s\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
-                "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"}}",
+                "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},\"RGB_LED\":%s}",
                 "BRUCE_VERSION",
                 BRUCE_VERSION,
                 "free",
@@ -483,7 +488,8 @@ void configureWebServer() {
                 "used",
                 humanReadableSize(LittleFSUsedBytes).c_str(),
                 "total",
-                humanReadableSize(LittleFSTotalBytes).c_str()
+                humanReadableSize(LittleFSTotalBytes).c_str(),
+                rgbLedAvailable
             );
             request->send(200, "application/json", response_body);
         }
