@@ -336,9 +336,9 @@ void beginLed() {
         rmt_driver_uninstall(rmt_channel_t(FASTLED_ESP32_RMT_CHANNEL_0));
         rmt_driver_install(rmt_channel_t(FASTLED_ESP32_RMT_CHANNEL_0), 0, 0);
     */
-    ledSetup();
-
+    // Apply the brightness cap before the first visible LED frame.
     setLedBrightness(bruceConfig.ledBright);
+    ledSetup();
 }
 
 void blinkLed(int blinkTime) {
@@ -375,7 +375,12 @@ void setLedEffect(int effect) {
 }
 
 void setLedBrightness(int value) {
+#ifdef FUSH_RGB_LED_48
+    // Limit the physical LED output to roughly the tested NeoPixel brightness of 40/255.
+    value = max(0, min(16, value));
+#else
     value = max(0, min(100, value));
+#endif
     int bright = 255 * value / 100;
     FastLED.setBrightness(bright);
     FastLED.show();
