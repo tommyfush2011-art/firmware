@@ -6,6 +6,8 @@ on:
     branches:
       - main
     paths:
+      - "embedded_resources/**"
+      - "patch.py"
       - "src/**"
       - "include/**"
       - "lib/**"
@@ -26,7 +28,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build esp32-s3-devkitc-1-psram
+    name: Build fush-s3-n16r8-rgb
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -54,9 +56,9 @@ jobs:
           path: |
             ~/.platformio
             .pio/libdeps
-          key: ${{ runner.os }}-pio-esp32-s3-devkitc-1-psram-${{ hashFiles('platformio.ini', 'boards/**/*.ini') }}
+          key: ${{ runner.os }}-pio-fush-s3-n16r8-rgb-${{ hashFiles('platformio.ini', 'boards/**/*.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-esp32-s3-devkitc-1-psram-
+            ${{ runner.os }}-pio-fush-s3-n16r8-rgb-
 
       - name: Set firmware version
         run: |
@@ -67,7 +69,7 @@ jobs:
       - name: Compile Fush Firmware
         run: |
           set -o pipefail
-          platformio run -e esp32-s3-devkitc-1-psram 2>&1 | tee build.log
+          platformio run -e fush-s3-n16r8-rgb 2>&1 | tee build.log
 
       - name: Show build log on failure
         if: failure()
@@ -82,6 +84,12 @@ jobs:
             -exec cp {} firmware-output/ \;
 
           if ! find firmware-output -name "*.bin" | grep -q .; then
+            if [[ -f .pio/build/fush-s3-n16r8-rgb/firmware.bin ]]; then
+              cp .pio/build/fush-s3-n16r8-rgb/firmware.bin firmware-output/fush-s3-n16r8-rgb-firmware.bin
+            fi
+          fi
+
+          if ! find firmware-output -name "*.bin" | grep -q .; then
             echo "No Bruce firmware binary found."
             exit 1
           fi
@@ -91,7 +99,7 @@ jobs:
       - name: Upload Fush Firmware
         uses: actions/upload-artifact@v4
         with:
-          name: Fush-ESP32-S3-N16R8
+          name: Fush-ESP32-S3-N16R8-RGB
           path: firmware-output/*.bin
           retention-days: 7
           if-no-files-found: error
