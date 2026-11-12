@@ -1,4 +1,4 @@
-
+// Fush RGB LED: safe, local colour control via USB serial or authenticated WebUI /cm.
 #include "led_commands.h"
 #include "core/led_control.h"
 #include <globals.h>
@@ -8,29 +8,19 @@
 namespace {
 
 bool setSolid(uint8_t red, uint8_t green, uint8_t blue) {
-    const uint32_t color =
-        (uint32_t(red) << 16) |
-        (uint32_t(green) << 8) | blue;
-
+    const uint32_t color = (uint32_t(red) << 16) | (uint32_t(green) << 8) | blue;
     bruceConfig.setLedEffect(LED_EFFECT_SOLID);
     bruceConfig.setLedColor(color);
     ledSetup();
-
-    serialDevice->printf(
-        "LED: #%02X%02X%02X\n", red, green, blue
-    );
+    serialDevice->printf("LED: #%02X%02X%02X\n", red, green, blue);
     return true;
 }
 
 bool parseChannel(const String &s, uint8_t &out) {
     if (!s.length()) return false;
-
     char *end = nullptr;
     const long val = strtol(s.c_str(), &end, 10);
-
-    if (!end || *end != '\0' || val < 0 || val > 255)
-        return false;
-
+    if (!end || *end != '\0' || val < 0 || val > 255) return false;
     out = static_cast<uint8_t>(val);
     return true;
 }
@@ -38,7 +28,6 @@ bool parseChannel(const String &s, uint8_t &out) {
 uint32_t ledRgb(cmd *c) {
     Command cmd(c);
     uint8_t r, g, b;
-
     if (!parseChannel(cmd.getArgument("r").getValue(), r) ||
         !parseChannel(cmd.getArgument("g").getValue(), g) ||
         !parseChannel(cmd.getArgument("b").getValue(), b)) {
@@ -51,32 +40,37 @@ uint32_t ledRgb(cmd *c) {
 uint32_t ledBrightness(cmd *c) {
     Command cmd(c);
     String value = cmd.getArgument("percent").getValue();
-
     if (!value.length()) return false;
-
     char *end = nullptr;
     const long percent = strtol(value.c_str(), &end, 10);
-
 #ifdef FUSH_RGB_LED_48
     const int limit = 16;
 #else
     const int limit = 100;
 #endif
-
-    if (!end || *end != '\0' ||
-        percent < 0 || percent > limit) {
-        serialDevice->printf(
-            "Brightness must be 0-%d percent\n", limit
-        );
+    if (!end || *end != '\0' || percent < 0 || percent > limit) {
+        serialDevice->printf("Brightness must be 0-%d percent\n", limit);
         return false;
     }
-
     bruceConfig.setLedBright(percent);
     setLedBrightness(percent);
+    serialDevice->printf("LED brightness: %ld%%\n", percent);
+    return true;
+}
 
-    serialDevice->printf(
-        "LED brightness: %ld%%\n", percent
-    );
+uint32_t ledSpeed(cmd *c) {
+    Command command(c);
+    const String value = command.getArgument("level").getValue();
+    if (!value.length()) return false;
+    char *end = nullptr;
+    const long speed = strtol(value.c_str(), &end, 10);
+    if (!end || *end != '\0' || speed < 1 || speed > 10) {
+        serialDevice->println("LED speed must be 1-10");
+        return false;
+    }
+    // The animation task reads ledEffectSpeed on each frame; no restart needed.
+    bruceConfig.setLedEffectSpeed(static_cast<int>(speed));
+    serialDevice->printf("LED animation speed: %ld/10\n", speed);
     return true;
 }
 
@@ -98,12 +92,11 @@ uint32_t ledWhite(cmd *) { return setSolid(255, 255, 255); }
 uint32_t ledOff(cmd *) { return setSolid(0, 0, 0); }
 
 } // namespace
-#endif
+#endif // HAS_RGB_LED
 
 void createLedCommands(SimpleCLI *cli) {
 #ifdef HAS_RGB_LED
     Command led = cli->addCompositeCmd("led");
-
     led.addCommand("red", ledRed);
     led.addCommand("orange", ledOrange);
     led.addCommand("green", ledGreen);
@@ -114,15 +107,14 @@ void createLedCommands(SimpleCLI *cli) {
     led.addCommand("white", ledWhite);
     led.addCommand("off", ledOff);
     led.addCommand("rainbow", ledRainbow);
-
     Command rgb = led.addCommand("rgb", ledRgb);
     rgb.addPosArg("r");
     rgb.addPosArg("g");
     rgb.addPosArg("b");
-
-    Command bright =
-        led.addCommand("brightness", ledBrightness);
+    Command bright = led.addCommand("brightness", ledBrightness);
     bright.addPosArg("percent");
+    Command speed = led.addCommand("speed", ledSpeed);
+    speed.addPosArg("level");
 #else
     (void)cli;
 #endif
