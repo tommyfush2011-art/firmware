@@ -15,6 +15,7 @@
 #include "util_commands.h"
 #include "wifi_commands.h"
 #include <globals.h>
+#include "led_commands.h"
 
 void cliErrorCallback(cmd_error *e) {
     CommandError cmdError(e); // Create wrapper object
