@@ -5,6 +5,7 @@
 #include "gpio_commands.h"
 #include "interpreter_commands.h"
 #include "ir_commands.h"
+#include "led_commands.h"
 #include "power_commands.h"
 #include "rf_commands.h"
 #include "rfid_commands.h"
@@ -15,7 +16,6 @@
 #include "util_commands.h"
 #include "wifi_commands.h"
 #include <globals.h>
-#include "led_commands.h"
 
 void cliErrorCallback(cmd_error *e) {
     CommandError cmdError(e); // Create wrapper object
@@ -37,6 +37,7 @@ void SerialCli::setup() {
 
     createCryptoCommands(&_cli);
     createGpioCommands(&_cli);
+    createLedCommands(&_cli);
     createIrCommands(&_cli);
     createPowerCommands(&_cli);
     createRfCommands(&_cli);
