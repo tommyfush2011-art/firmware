@@ -1,4 +1,5 @@
- function $(s) {
+
+function $(s) {
   return document.querySelector(s);
 }
 const IS_DEV = window.location.host === "127.0.0.1:8080";
@@ -470,6 +471,8 @@ async function fetchSystemInfo() {
   $(".free-space .free-fs span").innerHTML =
     `${info.LittleFS.used} / ${info.LittleFS.total}`;
   sdCardAvailable = info.SD.total != "0 B";
+  // The firmware advertises LED support only when compiled for suitable hardware.
+  document.querySelector(".fush-led-controls")?.classList.toggle("hidden", !info.RGB_LED);
   Dialog.loading.hide();
 }
 
@@ -788,6 +791,7 @@ async function renderTFT(data) {
         ctx.closePath();
         ctx.fill();
         break;
+
       case 9: // DRAWELLIPSE
         ctx.strokeStyle = color565toCSS(input.fg);
         ctx.beginPath();
@@ -1735,3 +1739,36 @@ window.addEventListener("popstate", (event) => {
     }, 100); // Small delay to ensure the file list is loaded first
   }
 })();
+
+
+// Physical RGB LED controls for supported builds (not the WebUI theme colours).
+async function setFushLed(mode) {
+  const presets = ["red", "orange", "green", "blue", "yellow", "cyan", "magenta", "white", "rainbow", "off"];
+  if (!presets.includes(mode)) return;
+  return sendFushLedCommand(`led ${mode}`);
+}
+
+async function applyFushLedColor() {
+  const hex = document.getElementById("fush-led-picker")?.value || "";
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+  const values = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
+  return sendFushLedCommand(`led rgb ${values.join(" ")}`);
+}
+
+async function applyFushLedBrightness() {
+  const percent = Number(document.getElementById("fush-led-brightness")?.value);
+  if (!Number.isInteger(percent) || percent < 0 || percent > 16) return;
+  return sendFushLedCommand(`led brightness ${percent}`);
+}
+
+async function sendFushLedCommand(command) {
+  const status = document.getElementById("fush-led-status");
+  if (!status) return;
+  status.textContent = "Sending LED command...";
+  try {
+    await requestPost("/cm", { cmnd: command });
+    status.textContent = "Command queued: " + command;
+  } catch (error) {
+    status.textContent = "Could not send LED command: " + (error?.message || "connection error");
+  }
+}
