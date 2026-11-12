@@ -56,7 +56,12 @@ void handleSerialCommands(SerialCli &serialCli) {
     // return to the menu after execution.
     String cmd_trimmed = cmd_str;
     cmd_trimmed.trim();
-    if (!cmd_trimmed.startsWith("nav") && !cmd_trimmed.startsWith("option")) { backToMenu(); }
+    // Navigator commands must NOT reset the menu after every USB key or screen request.
+    const bool usbNavCommand = cmd_trimmed.startsWith("fush nav ") ||
+                               cmd_trimmed == "fush screen" ||
+                               cmd_trimmed.startsWith("fush navigator ");
+    if (!usbNavCommand && !cmd_trimmed.startsWith("nav") &&
+        !cmd_trimmed.startsWith("option")) { backToMenu(); }
 }
 
 void _serialCmdsTaskLoop(void *pvParameters) {
