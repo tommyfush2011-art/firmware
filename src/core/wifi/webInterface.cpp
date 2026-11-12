@@ -1,4 +1,5 @@
 #include "webInterface.h"
+#include "core/serial_commands/hybrid_commands.h"
 #include "core/display.h"    // using displayRedStripe as error msg
 #include "core/mykeyboard.h" // using keyboard when calling rename
 #include "core/passwords.h"
@@ -42,7 +43,7 @@ String generateToken(int length = 24) {
 **  Turn off the WebUI
 **********************************************************************/
 void stopWebUi() {
-    tft.setLogging(false);
+    if (!fushUsbNavigatorActive()) tft.setLogging(false);
     isWebUIActive = false;
     server->end();
     server->~AsyncWebServer();
