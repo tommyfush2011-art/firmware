@@ -13,8 +13,47 @@ tft_logger::~tft_logger() {
     clearLog();
     if (log) free(log);
     if (images) free(images);
+    usbLiveActive = false;
+    if (usbLiveQueue) vQueueDelete(usbLiveQueue);
+    usbLiveQueue = NULL;
     log = nullptr;
     images = nullptr;
+}
+
+
+bool tft_logger::beginUsbLive() {
+    if (!logging || !log) return false;
+    if (!usbLiveQueue) usbLiveQueue = xQueueCreate(96, sizeof(tftLog));
+    if (!usbLiveQueue) return false;
+    usbLiveActive = false;
+    xQueueReset(usbLiveQueue);
+    usbLiveOverflow = false;
+    usbLiveActive = true;
+    return true;
+}
+void tft_logger::endUsbLive() {
+    usbLiveActive = false;
+    if (usbLiveQueue) xQueueReset(usbLiveQueue);
+    usbLiveOverflow = false;
+}
+bool tft_logger::popUsbLive(uint8_t *outBuffer, uint8_t &outSize) {
+    outSize = 0;
+    if (!usbLiveActive || !usbLiveQueue || !outBuffer) return false;
+    tftLog item = {};
+    if (xQueueReceive(usbLiveQueue, &item, 0) != pdTRUE) return false;
+    const uint8_t length = item.data[1];
+    if (item.data[0] != LOG_PACKET_HEADER || length < 3 || length > MAX_LOG_SIZE) return false;
+    memcpy(outBuffer, item.data, length);
+    outSize = length;
+    return true;
+}
+bool tft_logger::usbLiveLost() {
+    if (!usbLiveActive) return false;
+    return usbLiveOverflow;
+}
+void tft_logger::resetUsbLiveQueue() {
+    if (usbLiveQueue) xQueueReset(usbLiveQueue);
+    usbLiveOverflow = false;
 }
 
 void tft_logger::clearLog() {
@@ -212,6 +251,11 @@ bool tft_logger::isLogEqual(const tftLog &a, const tftLog &b) {
 
 void tft_logger::pushLogIfUnique(const tftLog &l) {
     if (!log) return;
+    // Send every actual draw while live mode is on, even if snapshot history
+    // de-duplicates identical records.  Never block the menu or game thread.
+    if (usbLiveActive && usbLiveQueue) {
+        if (xQueueSend(usbLiveQueue, &l, 0) != pdTRUE) usbLiveOverflow = true;
+    }
     for (int i = 0; i < logCount; i++) {
         // Invalidated entries must not suppress a subsequent redraw.
         if (log[i].data[0] != LOG_PACKET_HEADER) continue;
