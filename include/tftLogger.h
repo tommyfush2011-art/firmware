@@ -35,9 +35,9 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
     SCREEN_INFO = 99 // 99
 };
 #if defined(BOARD_HAS_PSRAM)
-#define MAX_LOG_ENTRIES 64
+#define MAX_LOG_ENTRIES 128
 #define MAX_LOG_SIZE 128
-#define MAX_LOG_IMAGES 1
+#define MAX_LOG_IMAGES 8
 #define MAX_LOG_IMG_PATH 512
 #else
 #define MAX_LOG_ENTRIES 40
@@ -63,6 +63,12 @@ private:
     bool async_serial = false;
     TaskHandle_t asyncSerialTask = NULL;
     QueueHandle_t asyncSerialQueue = NULL;
+    // A separate queue for USB live drawing commands.  Unlike the snapshot
+    // history, this records repeated draws that games need for animation.
+    QueueHandle_t usbLiveQueue = NULL;
+    volatile bool usbLiveActive = false;
+    volatile bool usbLiveOverflow = false;
+
     static void asyncSerialTaskFunc(void *pv);
     inline uint8_t currentTextSize() const {
 #if defined(HAS_SCREEN)
@@ -98,6 +104,12 @@ public:
     void inline setSleepMode(bool mode) { isSleeping = mode; }
 
     void getBinLog(uint8_t *outBuffer, size_t &outSize);
+    bool beginUsbLive();
+    void endUsbLive();
+    bool popUsbLive(uint8_t *outBuffer, uint8_t &outSize);
+    bool usbLiveLost();
+    void resetUsbLiveQueue();
+
     bool removeLogEntriesInsideRect(int rx, int ry, int rw, int rh);
     void removeOverlappedImages(int x, int y, int center, int ms);
 
