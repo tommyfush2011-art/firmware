@@ -12,12 +12,16 @@
 namespace {
 bool usbNavigator = false;
 uint32_t screenSequence = 0;
+bool liveUSB = false;
+uint32_t liveSequence = 0;
+uint32_t lastResyncAt = 0;
 
 void printStatus() {
     serialDevice->println("Fush OS Hybrid Control");
     serialDevice->println("USB serial: available (115200 baud)");
     serialDevice->println(String("Wi-Fi WebUI: ") + (isWebUIActive && server ? "ON" : "OFF"));
     serialDevice->println(String("USB Navigator: ") + (usbNavigator ? "ON" : "OFF"));
+    serialDevice->println(String("USB Live Drawing: ") + (liveUSB ? "ON" : "OFF"));
     const wifi_mode_t mode = WiFi.getMode();
     if (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA) {
         serialDevice->println("Wi-Fi AP address: " + WiFi.softAPIP().toString());
@@ -79,6 +83,8 @@ uint32_t navigatorMode(cmd *raw) {
         return true;
     }
     if (action == "stop") {
+        liveUSB = false;
+        tft.endUsbLive();
         usbNavigator = false;
         // The Wi-Fi Navigator uses the same logger: do not disable it.
         if (!isWebUIActive) tft.setLogging(false);
@@ -86,6 +92,7 @@ uint32_t navigatorMode(cmd *raw) {
         return true;
     }
     serialDevice->println(String("USB Navigator: ") + (usbNavigator ? "ON" : "OFF"));
+    serialDevice->println(String("USB Live Drawing: ") + (liveUSB ? "ON" : "OFF"));
     return true;
 }
 
@@ -182,7 +189,67 @@ uint32_t sendScreen(cmd *) {
     free(bytes);
     return true;
 }
+uint32_t liveCommand(cmd *raw) {
+    Command command(raw);
+    String action = command.getArgument("action").getValue();
+    action.trim(); action.toLowerCase();
+    if (action == "stop") {
+        liveUSB = false;
+        tft.endUsbLive();
+        serialDevice->println("@FUSHLIVE:OFF");
+        return true;
+    }
+    if (action == "start") {
+        if (!usbNavigator || !tft.getLogging()) {
+            serialDevice->println("ERROR: start USB Navigator first");
+            return false;
+        }
+        if (!tft.beginUsbLive()) {
+            serialDevice->println("ERROR: cannot allocate USB live drawing queue");
+            return false;
+        }
+        liveUSB = true;
+        liveSequence = 0;
+        serialDevice->println("@FUSHLIVE:ON");
+        // One full reference screen, then only incremental draw commands.
+        sendScreen(nullptr);
+        return true;
+    }
+    serialDevice->println(String("USB Live Drawing: ") + (liveUSB ? "ON" : "OFF"));
+    return true;
+}
 } // namespace
+
+// Called by the serial-command task; all USB protocol writes stay on one task.
+// Never block the drawing thread: if a producer outruns USB, resync to the
+// latest snapshot rather than sending a long queue of stale game frames.
+void fushUsbLivePump() {
+    if (!liveUSB) return;
+    if (tft.usbLiveLost()) {
+        if (millis() - lastResyncAt >= 700) {
+            lastResyncAt = millis();
+            tft.resetUsbLiveQueue();
+            serialDevice->println("@FUSHLIVE:RESYNC");
+            sendScreen(nullptr);
+            return;
+        }
+    }
+    constexpr char hexDigits[] = "0123456789ABCDEF";
+    uint8_t packet[MAX_LOG_SIZE];
+    char encoded[MAX_LOG_SIZE * 2 + 1];
+    uint8_t len = 0;
+    for (int n = 0; n < 12 && tft.popUsbLive(packet, len); ++n) {
+        // Image entries need external file bytes; ordinary drawing/text works
+        // without Wi-Fi. The initial snapshot still shows image placeholders.
+        if (packet[2] == DRAWIMAGE) continue;
+        for (uint8_t i = 0; i < len; ++i) {
+            encoded[2 * i] = hexDigits[packet[i] >> 4];
+            encoded[2 * i + 1] = hexDigits[packet[i] & 15];
+        }
+        encoded[2 * len] = 0;
+        serialDevice->printf("@FUSHLIVE:D:%lu:%s\n", (unsigned long)++liveSequence, encoded);
+    }
+}
 
 bool fushUsbNavigatorActive() { return usbNavigator; }
 
@@ -194,6 +261,8 @@ void createHybridCommands(SimpleCLI *cli) {
     Command navigator = fush.addCommand("navigator", navigatorMode);
     navigator.addPosArg("action", "status");
     fush.addCommand("screen", sendScreen);
+    Command live = fush.addCommand("live", liveCommand);
+    live.addPosArg("action", "status");
     Command nav = fush.addCommand("nav", navigationKey);
     nav.addPosArg("key");
     nav.addPosArg("duration", "90");
