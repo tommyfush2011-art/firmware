@@ -8,6 +8,7 @@
 #include <esp32-hal-psram.h>
 #include <cstdlib>
 #include <cstring>
+#include <esp_system.h>
 
 namespace {
 bool usbNavigator = false;
@@ -16,12 +17,127 @@ bool liveUSB = false;
 uint32_t liveSequence = 0;
 uint32_t lastResyncAt = 0;
 
+// Funny SSID presets use ONE ordinary encrypted ESP32 SoftAP, not crafted
+// beacon frames or multiple virtual networks. Never broadcast more than one.
+constexpr int FUNNY_PRESET_COUNT = 5;
+const char *const FUNNY_SSIDS[FUNNY_PRESET_COUNT] = {
+    "Fush Shark",
+    "Megalodon Lives Here",
+    "Definitely Not WiFi",
+    "Shark Territory",
+    "Fush OS Online"
+};
+bool funnyApOwned = false;
+int funnyApPreset = -1; // zero-based; -1 = off
+String funnyApPassword;
+
+bool funnyApRunning() {
+    const wifi_mode_t mode = WiFi.getMode();
+    return funnyApOwned && funnyApPreset >= 0 && funnyApPreset < FUNNY_PRESET_COUNT &&
+           (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA) &&
+           WiFi.softAPSSID() == FUNNY_SSIDS[funnyApPreset];
+}
+
+// The password is per-boot and printed only through the local USB console.
+// The device's Wi-Fi management HTTP server is NOT started by this feature.
+void ensureFunnyApPassword() {
+    if (funnyApPassword.length() >= 8) return;
+    char generated[21];
+    snprintf(generated, sizeof(generated), "Fush%08lX%08lX",
+             (unsigned long)esp_random(), (unsigned long)esp_random());
+    funnyApPassword = generated;
+}
+
+void stopFunnyAp() {
+    if (funnyApOwned) {
+        wifiDisconnect();
+        funnyApOwned = false;
+        funnyApPreset = -1;
+    }
+}
+
+void printFunnyApStatus() {
+    const bool active = funnyApRunning();
+    const int selected = active ? funnyApPreset + 1 : 0;
+    serialDevice->printf("@FUSHAP:STATE:%d:%d\n", active ? 1 : 0, selected);
+    serialDevice->printf("Funny SSID: AP=%d (single normal access point)\n", active ? 1 : 0);
+    if (active) {
+        serialDevice->println("Preset: " + String(selected) + "/5 - " + String(FUNNY_SSIDS[funnyApPreset]));
+        serialDevice->println("AP address: " + WiFi.softAPIP().toString());
+        serialDevice->println("AP password: " + funnyApPassword);
+        serialDevice->println("Connected clients: " + String(WiFi.softAPgetStationNum()));
+        serialDevice->println("Wi-Fi WebUI: OFF (USB control remains available)");
+    } else {
+        serialDevice->println("Funny SSID AP is OFF. Choose preset 1-5 to start one normal AP.");
+    }
+}
+
+uint32_t funnyApCommand(cmd *raw) {
+    Command command(raw);
+    String action = command.getArgument("action").getValue();
+    action.trim(); action.toLowerCase();
+    if (action == "" || action == "status") {
+        printFunnyApStatus();
+        return true;
+    }
+    if (action == "list") {
+        serialDevice->println("Funny SSID presets (AP=1, one at a time):");
+        for (int i = 0; i < FUNNY_PRESET_COUNT; ++i)
+            serialDevice->println(String(i + 1) + ". " + FUNNY_SSIDS[i]);
+        return true;
+    }
+    if (action == "off" || action == "stop") {
+        stopFunnyAp();
+        serialDevice->println("Funny SSID access point stopped");
+        printFunnyApStatus();
+        return true;
+    }
+    if (action == "set" || action == "start") {
+        const String text = command.getArgument("preset").getValue();
+        if (text.length() != 1 || text[0] < '1' || text[0] > '5') {
+            serialDevice->println("Use: fush ap set 1|2|3|4|5");
+            return false;
+        }
+        const int wanted = text[0] - '1';
+        if (funnyApRunning() && funnyApPreset == wanted) {
+            printFunnyApStatus();
+            return true;
+        }
+        // Wi-Fi WebUI cannot safely share this AP under another SSID.
+        // USB Navigator remains available (no USB serial teardown).
+        if (server) stopWebUi();
+        wifiDisconnect();
+        funnyApOwned = false;
+        funnyApPreset = -1;
+        ensureFunnyApPassword();
+        IPAddress gateway(172, 0, 0, 1);
+        if (!WiFi.mode(WIFI_AP) ||
+            !WiFi.softAPConfig(gateway, gateway, IPAddress(255, 255, 255, 0)) ||
+            !WiFi.softAP(FUNNY_SSIDS[wanted], funnyApPassword.c_str(), 6, 0, 1, false)) {
+            wifiDisconnect();
+            serialDevice->println("ERROR: unable to start the normal Wi-Fi AP");
+            printFunnyApStatus();
+            return false;
+        }
+        funnyApOwned = true;
+        funnyApPreset = wanted;
+        wifiConnected = true;
+        wifiIP = WiFi.softAPIP().toString();
+        serialDevice->println("Normal Wi-Fi AP started; no beacon spam or multiple networks");
+        printFunnyApStatus();
+        return true;
+    }
+    serialDevice->println("Use: fush ap list|status|set 1..5|off");
+    return false;
+}
+
 void printStatus() {
     serialDevice->println("Fush OS Hybrid Control");
     serialDevice->println("USB serial: available (115200 baud)");
     serialDevice->println(String("Wi-Fi WebUI: ") + (isWebUIActive && server ? "ON" : "OFF"));
     serialDevice->println(String("USB Navigator: ") + (usbNavigator ? "ON" : "OFF"));
     serialDevice->println(String("USB Live Drawing: ") + (liveUSB ? "ON" : "OFF"));
+    serialDevice->println(String("Funny SSID AP=") + (funnyApRunning() ? "1" : "0"));
     const wifi_mode_t mode = WiFi.getMode();
     if (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA) {
         serialDevice->println("Wi-Fi AP address: " + WiFi.softAPIP().toString());
@@ -30,7 +146,7 @@ void printStatus() {
     } else {
         serialDevice->println("Wi-Fi: not connected");
     }
-    serialDevice->println("Commands: fush mode usb|hybrid|status; fush navigator start|stop; fush screen; fush nav up|down|next|prev|sel|esc|menu");
+    serialDevice->println("Commands: fush mode usb|hybrid|status; fush ap list|status|set 1..5|off; fush navigator start|stop; fush screen; fush nav up|down|next|prev|sel|esc|menu");
 }
 
 uint32_t hybridMode(cmd *raw) {
@@ -44,12 +160,18 @@ uint32_t hybridMode(cmd *raw) {
     }
     if (mode == "usb" || mode == "otg") {
         if (server) stopWebUi();
-        const wifi_mode_t currentMode = WiFi.getMode();
-        if (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA) wifiDisconnect();
+        // Keep the user's single normal funny-name AP if it was explicitly started.
+        // Otherwise stop the management WebUI's AP as before.
+        if (!funnyApRunning()) {
+            const wifi_mode_t currentMode = WiFi.getMode();
+            if (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA) wifiDisconnect();
+        }
         serialDevice->println("Mode: USB control (Wi-Fi management WebUI stopped)");
         return true;
     }
     if (mode == "wifi" || mode == "hybrid" || mode == "both") {
+        // Switch back from the funny-name AP to Fush's ordinary Wi-Fi WebUI AP.
+        stopFunnyAp();
         if (!server) startWebUi(true);
         if (server && isWebUIActive) {
             serialDevice->println("Mode: HYBRID (USB control and Wi-Fi WebUI)");
@@ -257,6 +379,10 @@ void createHybridCommands(SimpleCLI *cli) {
     Command fush = cli->addCompositeCmd("fush");
     Command mode = fush.addCommand("mode", hybridMode);
     mode.addPosArg("target", "status");
+
+    Command ap = fush.addCommand("ap", funnyApCommand);
+    ap.addPosArg("action", "status");
+    ap.addPosArg("preset", "1");
 
     Command navigator = fush.addCommand("navigator", navigatorMode);
     navigator.addPosArg("action", "status");
