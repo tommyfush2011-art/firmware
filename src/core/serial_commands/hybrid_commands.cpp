@@ -112,14 +112,28 @@ uint32_t navigationKey(cmd *raw) {
         return false;
     }
 
-    // Same logical buttons as authenticated Wi-Fi /cm navigation.
-    const uint32_t started = millis();
-    do {
+    // One short press == one menu movement. Repeating the flag every 50 ms
+    // made the menu consume the same USB key more than once, skipping entries.
+    // Match the original Wi-Fi /cm behavior: a single press plus time for the
+    // device's menu task to consume it. Only explicit Menu/long-press repeats.
+    if (key == "menu") {
+        const uint32_t longHold = (holdMs < 450) ? 500 : holdMs;
+        const uint32_t started = millis();
+        do {
+            if (!*target) {
+                AnyKeyPress = true;
+                SerialCmdPress = true;
+                *target = true;
+            }
+            vTaskDelay(pdMS_TO_TICKS(40));
+        } while (millis() - started < longHold);
+    } else {
         AnyKeyPress = true;
         SerialCmdPress = true;
         *target = true;
-        vTaskDelay(pdMS_TO_TICKS(50));
-    } while (millis() - started < holdMs);
+        // Do not reassert the flag if the UI task has already consumed it.
+        vTaskDelay(pdMS_TO_TICKS(190));
+    }
     return true;
 }
 
