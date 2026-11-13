@@ -47,15 +47,18 @@ void handleSerialCommands(SerialCli &serialCli) {
     if (!serialDevice->available()) return;
 
     String cmd_str = serialDevice->readStringUntil('\n');
-    Serial.println("COMMAND: " + cmd_str);
-    serialCli.parse(cmd_str);
-    serialDevice->print("# "); // prompt
-
-    // forced menu redrawn if the command is not "nav" or "option"
-    // it allows navigation commands to be executed without returning to the menu, while other commands will
-    // return to the menu after execution.
     String cmd_trimmed = cmd_str;
     cmd_trimmed.trim();
+    if (cmd_trimmed.isEmpty()) return;
+
+    // Navigation uses the serial wire as a data transport, not as a shell.
+    // Avoid cluttering the USB browser console with repeated COMMAND / # text.
+    const bool quietNavTransport = cmd_trimmed.startsWith("fush nav ") ||
+                                   cmd_trimmed == "fush screen" ||
+                                   cmd_trimmed.startsWith("fush navigator ");
+    if (!quietNavTransport) Serial.println("COMMAND: " + cmd_trimmed);
+    serialCli.parse(cmd_trimmed);
+    if (!quietNavTransport) serialDevice->print("# "); // human CLI prompt
     // Navigator commands must NOT reset the menu after every USB key or screen request.
     const bool usbNavCommand = cmd_trimmed.startsWith("fush nav ") ||
                                cmd_trimmed == "fush screen" ||
