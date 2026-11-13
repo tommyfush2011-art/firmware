@@ -3,6 +3,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "utils.h"
+#include "serial_commands/hybrid_commands.h"
 #include <globals.h>
 
 QueueHandle_t cmdQueue = nullptr;
@@ -55,14 +56,16 @@ void handleSerialCommands(SerialCli &serialCli) {
     // Avoid cluttering the USB browser console with repeated COMMAND / # text.
     const bool quietNavTransport = cmd_trimmed.startsWith("fush nav ") ||
                                    cmd_trimmed == "fush screen" ||
-                                   cmd_trimmed.startsWith("fush navigator ");
+                                   cmd_trimmed.startsWith("fush navigator ") ||
+                                   cmd_trimmed.startsWith("fush live ");
     if (!quietNavTransport) Serial.println("COMMAND: " + cmd_trimmed);
     serialCli.parse(cmd_trimmed);
     if (!quietNavTransport) serialDevice->print("# "); // human CLI prompt
     // Navigator commands must NOT reset the menu after every USB key or screen request.
     const bool usbNavCommand = cmd_trimmed.startsWith("fush nav ") ||
                                cmd_trimmed == "fush screen" ||
-                               cmd_trimmed.startsWith("fush navigator ");
+                               cmd_trimmed.startsWith("fush navigator ") ||
+                                   cmd_trimmed.startsWith("fush live ");
     if (!usbNavCommand && !cmd_trimmed.startsWith("nav") &&
         !cmd_trimmed.startsWith("option")) { backToMenu(); }
 }
@@ -71,6 +74,7 @@ void _serialCmdsTaskLoop(void *pvParameters) {
     Serial.begin(115200);
     while (1) {
         handleSerialCommands(serialCli);
+        fushUsbLivePump();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
