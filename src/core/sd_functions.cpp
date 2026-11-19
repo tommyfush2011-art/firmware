@@ -1,5 +1,4 @@
 #include "sd_functions.h"
-#include <SD_MMC.h>
 #include "bus_HAL.h"
 #include "display.h" // using displayRedStripe as error msg
 #include "modules/badusb_ble/ducky_typer.h"
@@ -51,18 +50,6 @@ void closeLittleFS() {
 ***************************************************************************************/
 bool setupSdCard(uint8_t maxFiles) {
     if (maxFiles < 1) { maxFiles = 1; }
-#if defined(FUSH_CAM_SDMMC)
-    if (sdcardMounted) return true;
-    Serial.println("FUSH CAM: SDMMC CLK=39 CMD=38 D0=40");
-    if (!SD_MMC.setPins(39, 38, 40) || !SD_MMC.begin("/sdcard", true)) {
-        Serial.println("FUSH CAM: SDMMC mount failed");
-        sdcardMounted = false;
-        return false;
-    }
-    sdcardMounted = true;
-    Serial.printf("FUSH CAM: SD card size %llu MB\n", SD_MMC.cardSize() / (1024ULL * 1024ULL));
-    return true;
-#else
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0 || bruceConfigPins.SDCARD_bus.miso < 0 ||
         bruceConfigPins.SDCARD_bus.mosi < 0 || bruceConfigPins.SDCARD_bus.cs < 0) {
@@ -70,6 +57,16 @@ bool setupSdCard(uint8_t maxFiles) {
         Serial.printf("FUSH SD: SCK=%d MISO=%d MOSI=%d CS=%d\n",
                       bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso,
                       bruceConfigPins.SDCARD_bus.mosi, bruceConfigPins.SDCARD_bus.cs);
+        sdcardMounted = false;
+        return false;
+    }
+#endif
+#if defined(USE_SD_MMC) && defined(FUSH_CAM_SDMMC)
+    // CAM TF slot: 1-bit SDMMC. Only touched when SD mounting is requested.
+    // DEV boards without a slot can fail gracefully and continue with LittleFS.
+    Serial.println("FUSH CAM SDMMC: CLK=39 CMD=38 D0=40 (1-bit)");
+    if (!SD.setPins(39, 38, 40)) {
+        Serial.println("FUSH CAM SDMMC: setPins failed");
         sdcardMounted = false;
         return false;
     }
@@ -147,7 +144,6 @@ bool setupSdCard(uint8_t maxFiles) {
         sdcardMounted = true;
         return true;
     }
-#endif // FUSH_CAM_SDMMC
 }
 
 /***************************************************************************************
@@ -155,11 +151,7 @@ bool setupSdCard(uint8_t maxFiles) {
 ** Description:   Turn Off SDCard, set sdcardMounted state to false
 ***************************************************************************************/
 void closeSdCard() {
-#if defined(FUSH_CAM_SDMMC)
-    SD_MMC.end();
-#else
     SD.end();
-#endif
     Serial.println("SD Card Unmounted...");
     sdcardMounted = false;
 }
