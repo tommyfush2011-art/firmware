@@ -858,7 +858,21 @@ uint32_t freeStorageCallback(cmd *c) {
             serialDevice->printf("SD Used space: %llu Bytes\n", usedBytes);
             serialDevice->printf("SD Free space: %llu Bytes\n", freeBytes);
         } else {
-            serialDevice->println("No SD card installed");
+            serialDevice->println("SD card not mounted (this does not necessarily mean no card is inserted).");
+#ifndef USE_SD_MMC
+            serialDevice->printf("SD SPI pins: SCK=%d MISO=%d MOSI=%d CS=%d\n",
+                                 bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso,
+                                 bruceConfigPins.SDCARD_bus.mosi, bruceConfigPins.SDCARD_bus.cs);
+            if (bruceConfigPins.SDCARD_bus.sck < 0 || bruceConfigPins.SDCARD_bus.miso < 0 ||
+                bruceConfigPins.SDCARD_bus.mosi < 0 || bruceConfigPins.SDCARD_bus.cs < 0) {
+                serialDevice->println("SD SPI pins are disabled/incomplete in this board profile.");
+                serialDevice->println("CAM board requires verified SD slot wiring and a matching build profile.");
+            } else {
+                serialDevice->println("Check card format (FAT32), wiring and SPI/SD_MMC interface type.");
+            }
+#else
+            serialDevice->println("SD_MMC mount failed. Check verified board SD_MMC wiring and FAT32 format.");
+#endif
         }
     } else if (arg.getValue() == "littlefs") {
 
