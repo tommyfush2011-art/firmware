@@ -51,7 +51,12 @@ void closeLittleFS() {
 bool setupSdCard(uint8_t maxFiles) {
     if (maxFiles < 1) { maxFiles = 1; }
 #ifndef USE_SD_MMC
-    if (bruceConfigPins.SDCARD_bus.sck < 0) {
+    if (bruceConfigPins.SDCARD_bus.sck < 0 || bruceConfigPins.SDCARD_bus.miso < 0 ||
+        bruceConfigPins.SDCARD_bus.mosi < 0 || bruceConfigPins.SDCARD_bus.cs < 0) {
+        Serial.println("FUSH SD: SPI pin configuration is incomplete; no SD mount attempted.");
+        Serial.printf("FUSH SD: SCK=%d MISO=%d MOSI=%d CS=%d\n",
+                      bruceConfigPins.SDCARD_bus.sck, bruceConfigPins.SDCARD_bus.miso,
+                      bruceConfigPins.SDCARD_bus.mosi, bruceConfigPins.SDCARD_bus.cs);
         sdcardMounted = false;
         return false;
     }
