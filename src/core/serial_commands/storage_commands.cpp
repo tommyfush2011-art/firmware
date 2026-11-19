@@ -871,7 +871,7 @@ uint32_t freeStorageCallback(cmd *c) {
                 serialDevice->println("Check card format (FAT32), wiring and SPI/SD_MMC interface type.");
             }
 #else
-            serialDevice->println("SD_MMC mount failed. Check verified board SD_MMC wiring and FAT32 format.");
+            serialDevice->println("SD_MMC mount failed. Check FAT32, card seating, and CAM CLK39/CMD38/D0=40 wiring.");
 #endif
         }
     } else if (arg.getValue() == "littlefs") {
