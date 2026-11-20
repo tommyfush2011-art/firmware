@@ -1084,7 +1084,13 @@ bool checkLittleFsSizeNM() { return (LittleFS.totalBytes() - LittleFS.usedBytes(
 **********************************************************************/
 bool getFsStorage(FS *&fs) {
     // don't try to mount SD Card if not previously mounted
-    if (sdcardMounted) fs = &SD;
+    if (sdcardMounted) {
+#if defined(FUSH_CAM_SDMMC)
+        fs = &SD_MMC;
+#else
+        fs = &SD;
+#endif
+    }
     else if (checkLittleFsSize()) fs = &LittleFS;
     else return false;
 
