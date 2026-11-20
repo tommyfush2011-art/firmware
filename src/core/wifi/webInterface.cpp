@@ -16,6 +16,27 @@
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
+#if defined(FUSH_CAM_SDMMC)
+#include <SD_MMC.h>
+#endif
+
+// Fush CAM uses SDMMC 1-bit; standard boards retain their original SD backend.
+static fs::FS &fushWebSdFs() {
+#if defined(FUSH_CAM_SDMMC)
+    return SD_MMC;
+#else
+    return SD;
+#endif
+}
+
+static fs::FS *fushWebSelectFs(const String &drive) {
+    if (drive == "SD") {
+        if (!setupSdCard()) return nullptr;
+        return &fushWebSdFs();
+    }
+    if (drive == "LittleFS") return &LittleFS;
+    return nullptr;
+}
 
 File uploadFile;
 FS _webFS = LittleFS;
@@ -134,6 +155,7 @@ String listFiles(FS &fs, const String &folder) {
 
     File root = fs.open(folder);
     uploadFolder = folder;
+    if (!root || !root.isDirectory()) return returnText;
 
     while (true) {
         bool isDir;
@@ -233,11 +255,10 @@ void handleUpload(
             String fullPath = uploadFolder + "/" + relativePath;
             String dirPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
             if (dirPath.length() > 0) { createDirRecursive(dirPath, _webFS); }
-        RETRY:
             request->_tempFile = _webFS.open(uploadFolder + "/" + filename, "w");
             if (!request->_tempFile) {
-                // Serial.println("Failed to open file for writing: " + uploadFolder + "/" + filename);
-                goto RETRY;
+                Serial.println("FUSH WebUI: failed to open upload destination: " + uploadFolder + "/" + filename);
+                return;
             }
         }
 
@@ -350,7 +371,7 @@ void serveWebUIFile(
     AsyncWebServerResponse *response = nullptr;
     FS *fs = NULL;
     if (setupSdCard()) {
-        if (SD.exists("/BruceWebUI/" + filename)) fs = &SD;
+        if (fushWebSdFs().exists("/BruceWebUI/" + filename)) fs = &fushWebSdFs();
     } else if (LittleFS.exists("/BruceWebUI/" + filename)) {
         fs = &LittleFS;
     }
@@ -469,8 +490,17 @@ void configureWebServer() {
 #endif
             uint64_t LittleFSTotalBytes = LittleFS.totalBytes();
             uint64_t LittleFSUsedBytes = LittleFS.usedBytes();
-            uint64_t SDTotalBytes = SD.totalBytes();
-            uint64_t SDUsedBytes = SD.usedBytes();
+            uint64_t SDTotalBytes = 0;
+            uint64_t SDUsedBytes = 0;
+            if (setupSdCard()) {
+#if defined(FUSH_CAM_SDMMC)
+                SDTotalBytes = SD_MMC.totalBytes();
+                SDUsedBytes = SD_MMC.usedBytes();
+#else
+                SDTotalBytes = SD.totalBytes();
+                SDUsedBytes = SD.usedBytes();
+#endif
+            }
             snprintf(
                 response_body,
                 sizeof(response_body),
@@ -532,15 +562,14 @@ void configureWebServer() {
                 String filePath = request->arg("filePath").c_str();
                 String filePath2 = filePath.substring(0, filePath.lastIndexOf('/') + 1) + fileName;
                 // Rename the file of folder
-                if (fs == "SD") {
-                    if (SD.rename(filePath, filePath2))
-                        request->send(200, "text/plain", filePath + " renamed to " + filePath2);
-                    else request->send(200, "text/plain", "Fail renaming file.");
-                } else {
-                    if (LittleFS.rename(filePath, filePath2))
-                        request->send(200, "text/plain", filePath + " renamed to " + filePath2);
-                    else request->send(200, "text/plain", "Fail renaming file.");
+                fs::FS *selected = fushWebSelectFs(fs);
+                if (!selected) {
+                    request->send(503, "text/plain", "Storage unavailable or invalid filesystem");
+                    return;
                 }
+                if (selected->rename(filePath, filePath2))
+                    request->send(200, "text/plain", filePath + " renamed to " + filePath2);
+                else request->send(500, "text/plain", "Fail renaming file.");
             }
         }
     });
@@ -593,11 +622,12 @@ void configureWebServer() {
         if (checkUserWebAuth(request)) {
             String folder = "/";
             if (request->hasArg("folder")) { folder = request->arg("folder"); }
-            if (strcmp(request->arg("fs").c_str(), "SD") == 0) {
-                request->send(200, "text/plain", listFiles(SD, folder));
-            } else {
-                request->send(200, "text/plain", listFiles(LittleFS, folder));
+            fs::FS *selected = fushWebSelectFs(request->arg("fs"));
+            if (!selected) {
+                request->send(503, "text/plain", "Storage unavailable or invalid filesystem");
+                return;
             }
+            request->send(200, "text/plain", listFiles(*selected, folder));
         }
     });
 
@@ -611,10 +641,11 @@ void configureWebServer() {
                 bool useSD = false;
                 if (fileSys == "SD") useSD = true;
 
-                FS *fs;
-                if (useSD) {
-                    fs = &SD;
-                } else fs = &LittleFS;
+                FS *fs = fushWebSelectFs(fileSys);
+                if (!fs) {
+                    request->send(503, "text/plain", "Storage unavailable or invalid filesystem");
+                    return;
+                }
 
                 log_i("filename: %s\n", fileName.c_str());
                 log_i("fileAction: %s\n", fileAction.c_str());
@@ -695,14 +726,11 @@ void configureWebServer() {
 
                 if (strcmp(request->arg("fs").c_str(), "SD") == 0) { useSD = true; }
 
-                fs::FS *fs = useSD ? (fs::FS *)&SD : (fs::FS *)&LittleFS;
                 String fsType = useSD ? "SD" : "LittleFS";
-
-                if (useSD) {              // LittleFS is already mounted
-                    if (!setupSdCard()) { // only tries to mount SD if editting on SD
-                        request->send(500, "text/plain", "Failed to initialize file system: " + fsType);
-                        return;
-                    }
+                fs::FS *fs = fushWebSelectFs(fsType);
+                if (!fs) {
+                    request->send(503, "text/plain", "Failed to initialize file system: " + fsType);
+                    return;
                 }
 
                 File editFile = fs->open(fileName, FILE_WRITE);
