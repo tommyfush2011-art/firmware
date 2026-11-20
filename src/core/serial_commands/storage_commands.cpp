@@ -2,6 +2,7 @@
 #include "core/sd_functions.h"
 #include "helpers.h"
 #include <globals.h>
+#include <SD_MMC.h>
 
 // YModem logging - set to 1 to enable detailed transfer logging
 // #define YMODEM_LOGGING_ENABLED 1
@@ -153,15 +154,32 @@ uint32_t writeCallback(cmd *c) {
     if (!getFsStorage(fs)) return false;
 
     char *txt = _readFileFromSerial(fileSize + 2);
-    if (strlen(txt) == 0) return false;
+    if (!txt) {
+        serialDevice->println("Error: serial input allocation failed");
+        return false;
+    }
+    size_t textLength = strlen(txt);
+    if (textLength == 0) {
+        free(txt);
+        serialDevice->println("Error: no data received");
+        return false;
+    }
 
     File f = fs->open(filepath, FILE_WRITE, true);
-    if (!f) return false;
+    if (!f) {
+        free(txt);
+        serialDevice->println("Error: cannot open destination for writing");
+        return false;
+    }
 
-    f.write((const uint8_t *)txt, strlen(txt));
+    size_t written = f.write((const uint8_t *)txt, textLength);
+    f.flush();
     f.close();
     free(txt);
-
+    if (written != textLength) {
+        serialDevice->println("Error: incomplete file write");
+        return false;
+    }
     serialDevice->println("File written: " + filepath);
     return true;
 }
@@ -850,8 +868,13 @@ uint32_t freeStorageCallback(cmd *c) {
 
     if (arg.getValue() == "sd") {
         if (setupSdCard()) {
+#if defined(FUSH_CAM_SDMMC)
+            uint64_t totalBytes = SD_MMC.totalBytes();
+            uint64_t usedBytes = SD_MMC.usedBytes();
+#else
             uint64_t totalBytes = SD.totalBytes();
             uint64_t usedBytes = SD.usedBytes();
+#endif
             uint64_t freeBytes = totalBytes - usedBytes;
 
             serialDevice->printf("SD Total space: %llu Bytes\n", totalBytes);
