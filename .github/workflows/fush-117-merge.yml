@@ -1,0 +1,35 @@
+
+name: Prepare Fush OS Bruce 1.17 Upgrade
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upgrade branch
+        uses: actions/checkout@v4
+        with:
+          ref: fush-1.17-upgrade
+          fetch-depth: 0
+
+      - name: Fetch Bruce 1.17
+        run: |
+          git remote add upstream https://github.com/BruceDevices/firmware.git
+          git fetch upstream tag 1.17
+
+      - name: Check merge without changing GitHub
+        run: |
+          git config user.name "Fush OS Upgrade"
+          git config user.email "fush-upgrade@users.noreply.github.com"
+          git merge --no-commit --no-ff 1.17 || true
+
+          echo "=== CONFLICTED FILES ==="
+          git diff --name-only --diff-filter=U
+
+          echo "=== MERGE STATUS ==="
+          git status --short
