@@ -132,7 +132,9 @@ uint32_t funnyApCommand(cmd *raw) {
 }
 
 void printStatus() {
-#if defined(FUSH_RGB_LED_48)
+#if defined(FUSH_CAM_SDMMC)
+    serialDevice->println("@FUSHBOARD:ESP32-S3 CAM N16R8");
+#elif defined(FUSH_RGB_LED_48)
     serialDevice->println("@FUSHBOARD:ESP32-S3 DEV N16R8");
 #endif
     serialDevice->println("Fush OS Hybrid Control");
@@ -193,7 +195,9 @@ uint32_t navigatorMode(cmd *raw) {
     action.trim();
     action.toLowerCase();
     if (action == "start") {
-    #if defined(FUSH_RGB_LED_48)
+    #if defined(FUSH_CAM_SDMMC)
+    serialDevice->println("@FUSHBOARD:ESP32-S3 CAM N16R8");
+#elif defined(FUSH_RGB_LED_48)
     serialDevice->println("@FUSHBOARD:ESP32-S3 DEV N16R8");
 #endif
         usbNavigator = true;
