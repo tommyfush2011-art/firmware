@@ -87,36 +87,31 @@ JsonDocument BruceConfig::toJson() const {
 }
 
 void BruceConfig::fromFile(bool checkFS) {
-    FS *fs;
-    if (checkFS) {
-        if (!getFsStorage(fs)) {
-            log_i("Fail getting filesystem for config");
-            return;
-        }
-    } else {
-        if (checkLittleFsSize()) fs = &LittleFS;
-        else return;
-    }
-
-    if (!fs->exists(filepath)) {
-        log_i("Config file not found. Creating default config");
-        return saveFile();
-    }
-
-    File file;
-    file = fs->open(filepath, FILE_READ);
-    if (!file) {
-        log_i("Config file not found. Using default values");
-        return;
-    }
-
-    // Deserialize the JSON document
     JsonDocument jsonDoc;
-    if (deserializeJson(jsonDoc, file)) {
-        Serial.println("Failed to read config file, using default configuration");
+    FS *sd = nullptr;
+    if (checkFS && sdcardMounted) getFsStorage(sd);
+    bool found = false;
+    bool loaded = false;
+    FS *stores[] = {sd, &LittleFS};
+    for (FS *store : stores) {
+        if (!store) continue;
+        for (const String &path : {String(filepath), String(filepath) + ".prev"}) {
+            if (!store->exists(path)) continue;
+            found = true;
+            File file = store->open(path, FILE_READ);
+            jsonDoc.clear();
+            if (file && !deserializeJson(jsonDoc, file) && jsonDoc.is<JsonObject>()) {
+                loaded = true;
+                break;
+            }
+        }
+        if (loaded) break;
+    }
+    if (!loaded) {
+        if (!found) saveFile();
+        else log_e("No readable config; keeping existing files");
         return;
     }
-    file.close();
 
     JsonObject setting = jsonDoc.as<JsonObject>();
     int count = 0;
@@ -436,32 +431,52 @@ void BruceConfig::fromFile(bool checkFS) {
     log_i("Using config from file");
 }
 
+// FAT cannot rename over an existing file. Keep the previous config recoverable
+// until the complete replacement has been closed and promoted.
+static bool writeConfig(FS &store, const String &path, const JsonDocument &doc) {
+    const String temp = path + ".tmp";
+    const String previous = path + ".prev";
+    const size_t expected = measureJsonPretty(doc);
+    if (doc.overflowed() || expected < 5) return false;
+    File out = store.open(temp, FILE_WRITE);
+    if (!out) return false;
+    const size_t written = serializeJsonPretty(doc, out);
+    out.flush();
+    out.close();
+    File check = store.open(temp, FILE_READ);
+    if (!check || written != expected || check.size() != expected) return false;
+    check.close();
+    if (store.exists(path)) {
+        if (store.exists(previous) && !store.remove(previous)) return false;
+        if (!store.rename(path, previous)) return false;
+    }
+    if (!store.rename(temp, path)) return false;
+    if (store.exists(previous)) store.remove(previous);
+    return true;
+}
+
 void BruceConfig::saveFile() {
-    FS *fs = &LittleFS;
-    JsonDocument jsonDoc = toJson();
-
-    // Open file for writing
-    File file = fs->open(filepath, FILE_WRITE);
-    if (!file) {
-        log_e("Failed to open config file");
-        file.close();
-        return;
-    };
-
-    // Serialize JSON to file
-    serializeJsonPretty(jsonDoc, Serial);
-    if (serializeJsonPretty(jsonDoc, file) < 5) log_e("Failed to write config file");
-    else log_i("config file written successfully");
-
-    file.close();
-
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    JsonDocument doc = toJson();
+    if (!writeConfig(LittleFS, filepath, doc)) log_e("Internal config save failed");
+    FS *sd = nullptr;
+    if (setupSdCard() && getFsStorage(sd) && sd != &LittleFS &&
+        !writeConfig(*sd, filepath, doc)) log_e("SD config save failed");
 }
 
 void BruceConfig::factoryReset() {
-    FS *fs = &LittleFS;
-    fs->rename(String(filepath), "/bak." + String(filepath).substring(1));
-    if (setupSdCard()) SD.rename(String(filepath), "/bak." + String(filepath).substring(1));
+    FS *sd = nullptr;
+    if (setupSdCard()) getFsStorage(sd);
+    FS *stores[] = {&LittleFS, sd};
+    for (FS *store : stores) {
+        if (!store) continue;
+        const String path(filepath);
+        const String backup = "/bak." + path.substring(1);
+        if (store->exists(path)) {
+            if (store->exists(backup)) store->remove(backup);
+            store->rename(path, backup);
+        }
+        if (store->exists(path + ".prev")) store->remove(path + ".prev");
+    }
     ESP.restart();
 }
 
