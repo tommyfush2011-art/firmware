@@ -1,5 +1,7 @@
 #include "storage_commands.h"
 #include <ArduinoJson.h>
+#include <algorithm>
+#include <esp_system.h>
 #include "core/sd_functions.h"
 #include "helpers.h"
 #include <globals.h>
@@ -16,6 +18,169 @@ static int hexDigit(char ch) {
 
 // Stream one directory at a time. Explicit volume selection avoids the
 // legacy storage commands' automatic fallback from SD to internal flash.
+// Text editor transport. Only one staged write owns this USB editing session.
+// Offsets and content checks detect truncated, repeated or stale chunks.
+namespace {
+constexpr size_t editLimit = 256 * 1024;
+constexpr size_t chunkSize = 128;
+struct Upload {
+    FS *store = nullptr;
+    String token, path, stage, original;
+    size_t received = 0;
+};
+Upload upload;
+
+uint32_t editHash(uint32_t hash, const uint8_t *data, size_t count) {
+    for (size_t i = 0; i < count; ++i) hash = (hash ^ data[i]) * 16777619u;
+    return hash;
+}
+String hex32(uint32_t value) {
+    char out[9];
+    snprintf(out, sizeof(out), "%08lx", (unsigned long)value);
+    return String(out);
+}
+bool decodeBytes(const String &hex, uint8_t *out, size_t capacity) {
+    if (hex.length() % 2 || hex.length() / 2 > capacity) return false;
+    for (size_t i = 0; i < hex.length(); i += 2) {
+        int a = hexDigit(hex[i]), b = hexDigit(hex[i+1]);
+        if (a < 0 || b < 0) return false;
+        out[i/2] = (a << 4) | b;
+    }
+    return true;
+}
+bool decimalValue(const String &s, size_t &value) {
+    if (!s.length() || s.length() > 6) return false;
+    value = 0;
+    for (unsigned i = 0; i < s.length(); ++i) {
+        if (s[i] < '0' || s[i] > '9') return false;
+        value = value * 10 + s[i] - '0';
+    }
+    return value <= editLimit;
+}
+// An empty prefix computes the revision without sending the contents.
+String fileRevision(FS &fs, const String &path, const String &prefix) {
+    File file = fs.open(path, FILE_READ);
+    if (!file || file.isDirectory() || file.size() > editLimit) return "";
+    size_t length = file.size(), offset = 0;
+    uint32_t hash = 2166136261u;
+    uint8_t bytes[chunkSize];
+    char hex[chunkSize * 2 + 1];
+    const char *digits = "0123456789abcdef";
+    while (offset < length) {
+        size_t count = file.read(bytes, std::min(chunkSize, length - offset));
+        if (!count || count > length - offset || count > chunkSize) return "";
+        hash = editHash(hash, bytes, count);
+        if (prefix.length()) {
+            for (size_t i=0; i<count; ++i) {
+                hex[i*2] = digits[bytes[i] >> 4];
+                hex[i*2+1] = digits[bytes[i] & 15];
+            }
+            hex[count*2] = 0;
+            serialDevice->printf("%sDATA %u %s\n", prefix.c_str(), (unsigned)offset, hex);
+        }
+        offset += count;
+    }
+    return String((unsigned)length) + "-" + hex32(hash);
+}
+void discardStage() {
+    if (upload.store) upload.store->remove(upload.stage);
+    upload = Upload();
+}
+FS *editVolume(const String &volume) {
+    if (volume == "internal") return setupLittleFS() ? &LittleFS : nullptr;
+    if (volume != "sd" || !setupSdCard()) return nullptr;
+#if defined(FUSH_CAM_SDMMC)
+    return &SD_MMC;
+#else
+    return &SD;
+#endif
+}
+uint32_t editCallback(cmd *c) {
+    Command command(c);
+    String id = command.getArgument("request").getValue();
+    if (!id.length() || id.length()>12) return false;
+    for (unsigned i=0;i<id.length();++i) if (id[i]<'0' || id[i]>'9') return false;
+    String prefix = "@FUSHEDIT:" + id + ":";
+    auto fail = [&](const String &msg) -> uint32_t {
+        serialDevice->println(prefix + "ERROR " + msg);
+        return false;
+    };
+    String verb = command.getArgument("verb").getValue();
+    String target = command.getArgument("target").getValue();
+    String arg = command.getArgument("arg").getValue();
+    String data = command.getArgument("data").getValue();
+    if (verb == "read" || verb == "begin") {
+        FS *fs = editVolume(target);
+        if (!fs) return fail("Storage unavailable");
+        if (!arg.length() || arg.length()%2) return fail("Invalid path");
+        String path;
+        if (!path.reserve(arg.length()/2)) return fail("Insufficient memory");
+        for (unsigned i=0; i<arg.length(); i+=2) {
+            int a=hexDigit(arg[i]), b=hexDigit(arg[i+1]);
+            if (a<0 || b<0 || (a==0 && b==0)) return fail("Invalid path");
+            path += char(a*16+b);
+        }
+        if (!path.startsWith("/") || path.endsWith("/") || path.indexOf("//")>=0 ||
+            path.indexOf('\\')>=0 || path.indexOf("/../")>=0 || path.endsWith("/..") ||
+            path.indexOf("/./")>=0 || path.endsWith("/.")) return fail("Invalid file path");
+        if (verb=="read") {
+            String revision = fileRevision(*fs,path,prefix);
+            if (!revision.length()) return fail("Cannot read this file (limit 256 KiB)");
+            serialDevice->println(prefix + "OK " + revision);
+            return true;
+        }
+        if (data=="new" && fs->exists(path)) return fail("A file or folder already has that name");
+        discardStage();
+        String token = hex32(esp_random());
+        String stage = "/.otg-" + token + ".tmp";
+        if (stage.equalsIgnoreCase(path) || fs->exists(stage)) return fail("Temporary name collision; retry");
+        File file=fs->open(stage, FILE_WRITE);
+        if (!file) return fail("Cannot create temporary file; check free space");
+        file.close();
+        upload.store=fs; upload.token=token; upload.stage=stage; upload.path=path; upload.original=data;
+        serialDevice->println(prefix+"OK "+token);
+        return true;
+    }
+    if (!upload.store || target!=upload.token) return fail("Save session expired; retry");
+    if (verb=="cancel") {
+        discardStage();
+        serialDevice->println(prefix+"OK");
+        return true;
+    }
+    size_t offset;
+    if (!decimalValue(arg,offset) || offset!=upload.received) return fail("Save offset mismatch");
+    FS &fs=*upload.store;
+    if (verb=="put") {
+        uint8_t bytes[chunkSize];
+        const size_t n=data.length()/2;
+        if (!n || !decodeBytes(data, bytes, chunkSize) || offset+n>editLimit)
+            return fail("Invalid data chunk");
+        File file=fs.open(upload.stage, FILE_APPEND);
+        if (!file || file.size()!=offset || file.write(bytes,n)!=n) return fail("Write failed; check free space");
+        file.close();
+        upload.received+=n;
+        serialDevice->println(prefix+"OK");
+        return true;
+    }
+    if (verb!="commit") return fail("Unknown editor action");
+    const String revision=String((unsigned)offset)+"-"+data;
+    if (revision!=fileRevision(fs,upload.stage,"")) return fail("Saved bytes failed verification");
+    const bool exists=fs.exists(upload.path);
+    if (upload.original=="new" ? exists : (!exists || upload.original!=fileRevision(fs,upload.path,"")))
+        return fail("File changed or already exists. Reopen it or save with a new name.");
+    String backup="/.otg-"+upload.token+".bak";
+    if (exists && (fs.exists(backup) || !fs.rename(upload.path,backup))) return fail("Cannot back up original");
+    if (!fs.rename(upload.stage,upload.path)) {
+        if (exists && !fs.rename(backup,upload.path)) return fail("Original retained at "+backup);
+        return fail("Cannot install saved file");
+    }
+    if (exists) fs.remove(backup);
+    upload=Upload();
+    serialDevice->println(prefix+"OK "+revision);
+    return true;
+}
+} // namespace
+
 static uint32_t browseCallback(cmd *c) {
     Command command(c);
     String id = command.getArgument("request").getValue();
@@ -1022,6 +1187,12 @@ void createRmdirCommand(SimpleCLI *cli) {
 void createStorageCommand(SimpleCLI *cli) {
     Command cmd = cli->addCompositeCommand("storage");
 
+    Command edit = cmd.addCommand("edit", editCallback);
+    edit.addPosArg("request");
+    edit.addPosArg("verb");
+    edit.addPosArg("target");
+    edit.addPosArg("arg");
+    edit.addPosArg("data");
     Command browse = cmd.addCommand("browse", browseCallback);
     browse.addPosArg("volume");
     browse.addPosArg("request");
