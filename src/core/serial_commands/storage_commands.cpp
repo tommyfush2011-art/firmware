@@ -1140,7 +1140,11 @@ uint32_t freeStorageCallback(cmd *c) {
                 serialDevice->println("Check card format (FAT32), wiring and SPI/SD_MMC interface type.");
             }
 #else
-            serialDevice->println("SD_MMC mount failed. Check FAT32, card seating, and CAM CLK39/CMD38/D0=40 wiring.");
+            serialDevice->println("CAM SD_MMC mount failed. Check FAT32 and SD pins for your exact PCB.");
+#if defined(FUSH_CAM_SD_CLK) && defined(FUSH_CAM_SD_CMD) && defined(FUSH_CAM_SD_D0)
+            serialDevice->printf("CAM firmware SD pins: CLK=%d CMD=%d D0=%d (1-bit)\n", FUSH_CAM_SD_CLK, FUSH_CAM_SD_CMD, FUSH_CAM_SD_D0);
+#endif
+            serialDevice->println("USB Navigator board dropdown does not configure SD pins; flash the CAM build.");
 #endif
         }
     } else if (arg.getValue() == "littlefs") {
