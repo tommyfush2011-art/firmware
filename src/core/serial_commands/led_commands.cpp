@@ -43,18 +43,20 @@ uint32_t ledBrightness(cmd *c) {
     if (!value.length()) return false;
     char *end = nullptr;
     const long percent = strtol(value.c_str(), &end, 10);
-#ifdef FUSH_RGB_LED_48
-    const int limit = 16;
-#else
     const int limit = 100;
-#endif
     if (!end || *end != '\0' || percent < 0 || percent > limit) {
         serialDevice->printf("Brightness must be 0-%d percent\n", limit);
         return false;
     }
     bruceConfig.setLedBright(percent);
     setLedBrightness(percent);
+#ifdef FUSH_RGB_LED_48
+    // The 0..100 setting is a UI percentage; the existing GPIO48 output cap
+    // in setLedBrightness() is deliberately left intact.
+    serialDevice->printf("LED brightness setting: %ld%% (GPIO48 output capped at 16%%)\n", percent);
+#else
     serialDevice->printf("LED brightness: %ld%%\n", percent);
+#endif
     return true;
 }
 
@@ -71,6 +73,25 @@ uint32_t ledSpeed(cmd *c) {
     // The animation task reads ledEffectSpeed on each frame; no restart needed.
     bruceConfig.setLedEffectSpeed(static_cast<int>(speed));
     serialDevice->printf("LED animation speed: %ld/10\n", speed);
+    return true;
+}
+
+// Percentage UI for effect speed: 0=slowest supported, 100=fastest supported.
+// Do not write values above 10 into the LED engine: some effects use 11-speed
+// as a frame period and would otherwise produce invalid/overflowed periods.
+uint32_t ledSpeedPercent(cmd *c) {
+    Command command(c);
+    const String value = command.getArgument("percent").getValue();
+    if (!value.length()) return false;
+    char *end = nullptr;
+    const long percent = strtol(value.c_str(), &end, 10);
+    if (!end || *end != '\0' || percent < 0 || percent > 100) {
+        serialDevice->println("LED speed percent must be 0-100");
+        return false;
+    }
+    const int level = 1 + static_cast<int>((percent * 9 + 50) / 100);
+    bruceConfig.setLedEffectSpeed(level);
+    serialDevice->printf("LED speed: %ld%% (effect level %d/10)\n", percent, level);
     return true;
 }
 
@@ -115,6 +136,8 @@ void createLedCommands(SimpleCLI *cli) {
     bright.addPosArg("percent");
     Command speed = led.addCommand("speed", ledSpeed);
     speed.addPosArg("level");
+    Command speedPct = led.addCommand("speedpct", ledSpeedPercent);
+    speedPct.addPosArg("percent");
 #else
     (void)cli;
 #endif
