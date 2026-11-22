@@ -54,9 +54,20 @@ bool setupSdCard(uint8_t maxFiles) {
 #if defined(FUSH_CAM_SDMMC)
     if (sdcardMounted) return true;
 
-    constexpr int CAM_SD_CLK = 39;
-    constexpr int CAM_SD_CMD = 38;
-    constexpr int CAM_SD_D0  = 40;
+    // Pins selected by the CAM build environment; no runtime GPIO guessing.
+    // GPIO mapping varies by board model. Do not blindly try alternative pins.
+#ifndef FUSH_CAM_SD_CLK
+#error "CAM SD_MMC requires FUSH_CAM_SD_CLK build flag"
+#endif
+#ifndef FUSH_CAM_SD_CMD
+#error "CAM SD_MMC requires FUSH_CAM_SD_CMD build flag"
+#endif
+#ifndef FUSH_CAM_SD_D0
+#error "CAM SD_MMC requires FUSH_CAM_SD_D0 build flag"
+#endif
+    constexpr int CAM_SD_CLK = FUSH_CAM_SD_CLK;
+    constexpr int CAM_SD_CMD = FUSH_CAM_SD_CMD;
+    constexpr int CAM_SD_D0  = FUSH_CAM_SD_D0;
 
     Serial.printf("FUSH CAM SDMMC: CLK=%d CMD=%d D0=%d (1-bit)\\n",
                   CAM_SD_CLK, CAM_SD_CMD, CAM_SD_D0);
@@ -76,7 +87,7 @@ bool setupSdCard(uint8_t maxFiles) {
     }
 
     if (!SD_MMC.begin("/sdcard", true, false, 20000, maxFiles)) {
-        Serial.println("FUSH CAM SDMMC: begin() failed");
+        Serial.println("FUSH CAM SDMMC: begin() failed; check board-specific SD_MMC wiring, card seating, and FAT32");
         sdcardMounted = false;
         return false;
     }
