@@ -1,4 +1,5 @@
 #include "storage_commands.h"
+#include <ArduinoJson.h>
 #include "core/sd_functions.h"
 #include "helpers.h"
 #include <globals.h>
@@ -6,6 +7,74 @@
 
 // YModem logging - set to 1 to enable detailed transfer logging
 // #define YMODEM_LOGGING_ENABLED 1
+
+static int hexDigit(char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    return -1;
+}
+
+// Stream one directory at a time. Explicit volume selection avoids the
+// legacy storage commands' automatic fallback from SD to internal flash.
+static uint32_t browseCallback(cmd *c) {
+    Command command(c);
+    String id = command.getArgument("request").getValue();
+    String volume = command.getArgument("volume").getValue();
+    String encoded = command.getArgument("pathhex").getValue();
+    if (!id.length() || id.length() > 10) return false;
+    for (unsigned i = 0; i < id.length(); ++i)
+        if (id[i] < '0' || id[i] > '9') return false;
+    const String prefix = "@FUSHFS:" + id + ":";
+    auto fail = [&](const char *message) -> uint32_t {
+        serialDevice->println(prefix + "ERROR " + message);
+        return false;
+    };
+    if (!encoded.length() || encoded.length() % 2) return fail("Invalid folder path");
+    String path;
+    if (!path.reserve(encoded.length() / 2)) return fail("Out of memory");
+    for (unsigned i = 0; i < encoded.length(); i += 2) {
+        int hi = hexDigit(encoded[i]), lo = hexDigit(encoded[i + 1]);
+        if (hi < 0 || lo < 0 || (hi == 0 && lo == 0)) return fail("Invalid folder path");
+        path += char(hi * 16 + lo);
+    }
+    if (!path.startsWith("/")) return fail("Expected absolute folder path");
+    FS *fs = nullptr;
+    uint64_t total, used;
+    if (volume == "sd") {
+        if (!setupSdCard()) return fail("SD card unavailable");
+#if defined(FUSH_CAM_SDMMC)
+        auto &card = SD_MMC;
+#else
+        auto &card = SD;
+#endif
+        fs = &card;
+        total = card.totalBytes();
+        used = card.usedBytes();
+    } else if (volume == "internal") {
+        if (!setupLittleFS()) return fail("LittleFS unavailable");
+        fs = &LittleFS;
+        total = LittleFS.totalBytes();
+        used = LittleFS.usedBytes();
+    } else return fail("Unknown volume");
+    File dir = fs->open(path, FILE_READ);
+    if (!dir || !dir.isDirectory()) return fail("Cannot open folder");
+    serialDevice->printf("%sBEGIN %llu %llu\n", prefix.c_str(),
+                         (unsigned long long)used, (unsigned long long)total);
+    while (File entry = dir.openNextFile()) {
+        String name(entry.name());
+        name = name.substring(name.lastIndexOf('/') + 1);
+        JsonDocument row;
+        row["name"] = name;
+        row["dir"] = entry.isDirectory();
+        row["size"] = entry.size();
+        String json;
+        if (row.overflowed() || !serializeJson(row, json) || json.length() != measureJson(row))
+            return fail("Out of memory listing folder");
+        serialDevice->println(prefix + "ROW " + json);
+    }
+    serialDevice->println(prefix + "END");
+    return true;
+}
 
 uint32_t listCallback(cmd *c) {
     Command cmd(c);
@@ -952,6 +1021,11 @@ void createRmdirCommand(SimpleCLI *cli) {
 
 void createStorageCommand(SimpleCLI *cli) {
     Command cmd = cli->addCompositeCommand("storage");
+
+    Command browse = cmd.addCommand("browse", browseCallback);
+    browse.addPosArg("volume");
+    browse.addPosArg("request");
+    browse.addPosArg("pathhex");
 
     Command cmdList = cmd.addCommand("list", listCallback);
     cmdList.addPosArg("filepath", "");
