@@ -12,6 +12,7 @@ on:
       - "include/**"
       - "lib/**"
       - "boards/**"
+      - "tools/**"
       - "platformio.ini"
       - "platformio/**"
       - "scripts/**"
@@ -28,9 +29,18 @@ concurrency:
 
 jobs:
   build:
-    name: Build fush-s3-n16r8-rgb
+    name: Build ${{ matrix.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: fush-s3-n16r8-rgb
+            artifact: Fush-ESP32-S3-N16R8-DEV
+          - environment: fush-s3-n16r8-cam
+            artifact: Fush-ESP32-S3-N16R8-CAM
 
     steps:
       - name: Checkout repository
@@ -56,9 +66,9 @@ jobs:
           path: |
             ~/.platformio
             .pio/libdeps
-          key: ${{ runner.os }}-pio-fush-s3-n16r8-rgb-${{ hashFiles('platformio.ini', 'boards/**/*.ini') }}
+          key: ${{ runner.os }}-pio-${{ matrix.environment }}-${{ hashFiles('platformio.ini', 'boards/**/*.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-fush-s3-n16r8-rgb-
+            ${{ runner.os }}-pio-${{ matrix.environment }}-
 
       - name: Set firmware version
         run: |
@@ -66,10 +76,15 @@ jobs:
           echo "Building Fush Firmware version: $version"
           sed -i "s/-DBRUCE_VERSION=/-DBRUCE_VERSION='\"$version\"' ; /g" ./platformio.ini
 
+      - name: Verify build environment
+        run: |
+          platformio project config --lint
+          grep -Fq "[env:${{ matrix.environment }}]" platformio.ini
+
       - name: Compile Fush Firmware
         run: |
           set -o pipefail
-          platformio run -e fush-s3-n16r8-rgb 2>&1 | tee build.log
+          platformio run -e "${{ matrix.environment }}" 2>&1 | tee build.log
 
       - name: Show build log on failure
         if: failure()
@@ -77,21 +92,21 @@ jobs:
           tail -n 100 build.log || true
 
       - name: Prepare firmware artifact
+        shell: bash
         run: |
           mkdir -p firmware-output
 
-          find . -maxdepth 1 -type f -name "Bruce-*.bin" \
-            -exec cp {} firmware-output/ \;
+          # Prefer the merged Bruce binary if the build creates one.
+          shopt -s nullglob
+          merged=(./Bruce-*.bin)
 
-          if ! find firmware-output -name "*.bin" | grep -q .; then
-            if [[ -f .pio/build/fush-s3-n16r8-rgb/firmware.bin ]]; then
-              cp .pio/build/fush-s3-n16r8-rgb/firmware.bin firmware-output/fush-s3-n16r8-rgb-firmware.bin
-            fi
-          fi
-
-          if ! find firmware-output -name "*.bin" | grep -q .; then
-            echo "No Bruce firmware binary found."
-            exit 1
+          if (( ${#merged[@]} > 0 )); then
+            cp "${merged[0]}" firmware-output/
+          else
+            build_dir=".pio/build/${{ matrix.environment }}"
+            test -f "$build_dir/firmware.bin"
+            cp "$build_dir/firmware.bin" \
+              "firmware-output/${{ matrix.environment }}-firmware.bin"
           fi
 
           ls -lh firmware-output/
@@ -99,7 +114,7 @@ jobs:
       - name: Upload Fush Firmware
         uses: actions/upload-artifact@v4
         with:
-          name: Fush-ESP32-S3-N16R8-RGB
+          name: ${{ matrix.artifact }}
           path: firmware-output/*.bin
           retention-days: 7
           if-no-files-found: error
