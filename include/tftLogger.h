@@ -35,7 +35,7 @@ enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE E
     SCREEN_INFO = 99 // 99
 };
 #if defined(BOARD_HAS_PSRAM)
-#define MAX_LOG_ENTRIES 128
+#define MAX_LOG_ENTRIES 512
 #define MAX_LOG_SIZE 128
 #define MAX_LOG_IMAGES 8
 #define MAX_LOG_IMG_PATH 512
