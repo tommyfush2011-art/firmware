@@ -71,39 +71,50 @@ jobs:
             ${{ runner.os }}-pio-${{ matrix.environment }}-
 
       - name: Set firmware version
+        shell: bash
         run: |
           version="${GITHUB_SHA::7}"
           echo "Building Fush Firmware version: $version"
           sed -i "s/-DBRUCE_VERSION=/-DBRUCE_VERSION='\"$version\"' ; /g" ./platformio.ini
 
-      - name: Verify build environment
+      - name: Verify PlatformIO configuration
         run: |
           platformio project config --lint
-          grep -Fq "[env:${{ matrix.environment }}]" platformio.ini
+          platformio project config --json-output > /dev/null
 
       - name: Compile Fush Firmware
+        shell: bash
         run: |
           set -o pipefail
           platformio run -e "${{ matrix.environment }}" 2>&1 | tee build.log
 
       - name: Show build log on failure
         if: failure()
+        shell: bash
         run: |
-          tail -n 100 build.log || true
+          if [[ -f build.log ]]; then
+            tail -n 150 build.log
+          fi
 
       - name: Prepare firmware artifact
         shell: bash
         run: |
+          set -e
           mkdir -p firmware-output
 
-          # Prefer the merged Bruce binary if the build creates one.
+          build_dir=".pio/build/${{ matrix.environment }}"
           shopt -s nullglob
+
+          # Prefer a merged image if produced.
           merged=(./Bruce-*.bin)
 
-          if (( ${#merged[@]} > 0 )); then
-            cp "${merged[0]}" firmware-output/
+          if (( ${#merged[@]} == 1 )); then
+            cp "${merged[0]}" \
+              "firmware-output/${{ matrix.environment }}-merged.bin"
+          elif (( ${#merged[@]} > 1 )); then
+            echo "Multiple merged binaries found; refusing to guess."
+            exit 1
           else
-            build_dir=".pio/build/${{ matrix.environment }}"
             test -f "$build_dir/firmware.bin"
             cp "$build_dir/firmware.bin" \
               "firmware-output/${{ matrix.environment }}-firmware.bin"
