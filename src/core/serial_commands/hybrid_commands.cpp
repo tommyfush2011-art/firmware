@@ -132,6 +132,9 @@ uint32_t funnyApCommand(cmd *raw) {
 }
 
 void printStatus() {
+#if defined(FUSH_RGB_LED_48)
+    serialDevice->println("@FUSHBOARD:ESP32-S3 DEV N16R8");
+#endif
     serialDevice->println("Fush OS Hybrid Control");
     serialDevice->println("USB serial: available (115200 baud)");
     serialDevice->println(String("Wi-Fi WebUI: ") + (isWebUIActive && server ? "ON" : "OFF"));
@@ -190,6 +193,9 @@ uint32_t navigatorMode(cmd *raw) {
     action.trim();
     action.toLowerCase();
     if (action == "start") {
+    #if defined(FUSH_RGB_LED_48)
+    serialDevice->println("@FUSHBOARD:ESP32-S3 DEV N16R8");
+#endif
         usbNavigator = true;
         if (!tft.getLogging()) {
             tft.setLogging(true);
