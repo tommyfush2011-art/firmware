@@ -89,13 +89,14 @@ JsonDocument BruceConfig::toJson() const {
 void BruceConfig::fromFile(bool checkFS) {
     JsonDocument jsonDoc;
     FS *sd = nullptr;
-    if (checkFS && sdcardMounted) getFsStorage(sd);
+    if (checkFS) getFsStorage(sd);
     bool found = false;
     bool loaded = false;
     FS *stores[] = {sd, &LittleFS};
+    const String paths[] = {String(filepath), String(filepath) + ".prev"};
     for (FS *store : stores) {
         if (!store) continue;
-        for (const String &path : {String(filepath), String(filepath) + ".prev"}) {
+        for (const String &path : paths) {
             if (!store->exists(path)) continue;
             found = true;
             File file = store->open(path, FILE_READ);
