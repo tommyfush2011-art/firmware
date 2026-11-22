@@ -54,7 +54,8 @@ void handleSerialCommands(SerialCli &serialCli) {
 
     // Navigation uses the serial wire as a data transport, not as a shell.
     // Avoid cluttering the USB browser console with repeated COMMAND / # text.
-    const bool quietNavTransport = cmd_trimmed.startsWith("fush nav ") ||
+    const bool storageTransport = cmd_trimmed.startsWith("storage edit ") || cmd_trimmed.startsWith("storage browse ");
+    const bool quietNavTransport = storageTransport || cmd_trimmed.startsWith("fush nav ") ||
                                    cmd_trimmed == "fush screen" ||
                                    cmd_trimmed.startsWith("fush navigator ") ||
                                    cmd_trimmed.startsWith("fush live ");
@@ -66,7 +67,7 @@ void handleSerialCommands(SerialCli &serialCli) {
                                cmd_trimmed == "fush screen" ||
                                cmd_trimmed.startsWith("fush navigator ") ||
                                    cmd_trimmed.startsWith("fush live ");
-    if (!usbNavCommand && !cmd_trimmed.startsWith("fush ap ") &&
+    if (!storageTransport && !usbNavCommand && !cmd_trimmed.startsWith("fush ap ") &&
         cmd_trimmed != "fush ap" && !cmd_trimmed.startsWith("nav") &&
         !cmd_trimmed.startsWith("option")) { backToMenu(); }
 }
