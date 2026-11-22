@@ -109,7 +109,7 @@ uint32_t editCallback(cmd *c) {
     String target = command.getArgument("target").getValue();
     String arg = command.getArgument("arg").getValue();
     String data = command.getArgument("data").getValue();
-    if (verb == "read" || verb == "begin") {
+    if (verb == "read" || verb == "begin" || verb == "delete") {
         FS *fs = editVolume(target);
         if (!fs) return fail("Storage unavailable");
         if (!arg.length() || arg.length()%2) return fail("Invalid path");
@@ -123,6 +123,18 @@ uint32_t editCallback(cmd *c) {
         if (!path.startsWith("/") || path.endsWith("/") || path.indexOf("//")>=0 ||
             path.indexOf('\\')>=0 || path.indexOf("/../")>=0 || path.endsWith("/..") ||
             path.indexOf("/./")>=0 || path.endsWith("/.")) return fail("Invalid file path");
+        if (verb == "delete") {
+            if (data != "file") return fail("Expected file deletion");
+            if (upload.store == fs && (upload.stage.equalsIgnoreCase(path) || upload.path.equalsIgnoreCase(path)))
+                return fail("File has an active save");
+            File file = fs->open(path, FILE_READ);
+            if (!file) return fail("File missing or unreadable");
+            if (file.isDirectory()) return fail("Select a file");
+            file.close();
+            if (!fs->remove(path)) return fail("Storage could not delete the file");
+            serialDevice->println(prefix + "OK");
+            return true;
+        }
         if (verb=="read") {
             String revision = fileRevision(*fs,path,prefix);
             if (!revision.length()) return fail("Cannot read this file (limit 256 KiB)");
